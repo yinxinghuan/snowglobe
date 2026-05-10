@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no, maximum-scale=1.0" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0a0e1a" />
+<title>Snowglobe</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+  body {
+    border-radius: 24px;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+    font-family: "Cormorant Garamond", "Times New Roman", serif;
+    background: radial-gradient(ellipse at 50% 30%, #14182a 0%, #07091a 70%, #02030a 100%);
+    position: relative;
+    color: #e8d4b5;
+  }
+  #stage {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .hint {
+    position: absolute;
+    bottom: calc(max(20px, env(safe-area-inset-bottom)) + 18px);
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+    color: rgba(232, 212, 181, 0.42);
+    pointer-events: none;
+    z-index: 5;
+    opacity: 0;
+    animation: hintBreathe 4s ease-in-out 1.2s infinite;
+    text-align: center;
+    white-space: nowrap;
+  }
+  @keyframes hintBreathe {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 0.7; }
+  }
+  .hint.is-gone { animation: none; opacity: 0; transition: opacity 1.6s ease; }
+  .debug {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    padding: 8px 10px;
+    font-family: ui-monospace, "JetBrains Mono", monospace;
+    font-size: 10px;
+    line-height: 1.45;
+    color: rgba(232, 212, 181, 0.85);
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(232, 212, 181, 0.18);
+    border-radius: 6px;
+    z-index: 50;
+    display: none;
+    pointer-events: none;
+    white-space: pre;
+  }
+  .debug.is-on { display: block; }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<div class="hint" id="hint">Shake · Tilt</div>
+<div class="debug" id="debug"></div>
+<script>
+'use strict';
+
+// ─── Setup ────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('stage');
+const ctx = canvas.getContext('2d');
+const hintEl = document.getElementById('hint');
+const debugEl = document.getElementById('debug');
+const params = new URLSearchParams(location.search);
+const DEBUG = params.get('debug') === '1';
+if (DEBUG) debugEl.classList.add('is-on');
+
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = window.devicePixelRatio || 1;
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = W * DPR;
+  canvas.height = H * DPR;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.scale(DPR, DPR);
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ─── Globe geometry — derived from viewport, recomputed each frame ────────
+function globeGeom() {
+  // Globe is the dominant element. Pedestal sits below.
+  // Layout: 7% top margin, globe takes ~70% of min(W, H), pedestal underneath.
+  const cx = W / 2;
+  const usable = Math.min(W * 0.92, H * 0.72);
+  const r = usable / 2;
+  // Vertical center of globe — biased upward to leave room for pedestal.
+  const cy = H * 0.42;
+  return { cx, cy, r };
+}
+
+// ─── Snow particles ───────────────────────────────────────────────────────
+// Each flake lives entirely inside the globe (we clip on render). State is
+// kept in flat typed arrays for tight memory + fast iteration.
+const N = 240;                                    // number of snowflakes
+const sx = new Float32Array(N);
+const sy = new Float32Array(N);
+const svx = new Float32Array(N);
+const svy = new Float32Array(N);
+const sr = new Float32Array(N);                   // radius (size)
+const sa = new Float32Array(N);                   // alpha
+const sphase = new Float32Array(N);               // drift sine phase
+
+function seedFlakes() {
+  const g = globeGeom();
+  for (let i = 0; i < N; i++) {
+    // Uniform inside the disc
+    const ang = Math.random() * Math.PI * 2;
+    const rad = Math.sqrt(Math.random()) * g.r * 0.95;
+    sx[i] = g.cx + Math.cos(ang) * rad;
+    sy[i] = g.cy + Math.sin(ang) * rad;
+    svx[i] = (Math.random() - 0.5) * 0.3;
+    svy[i] = 0.2 + Math.random() * 0.8;
+    // Bimodal sizes — most small + occasional fat puff
+    sr[i] = Math.random() < 0.18
+      ? 1.6 + Math.random() * 1.4
+      : 0.5 + Math.random() * 1.0;
+    sa[i] = 0.55 + Math.random() * 0.4;
+    sphase[i] = Math.random() * Math.PI * 2;
+  }
+}
+seedFlakes();
+
+// ─── Wind (drift) field — driven by tilt + shake impulse ──────────────────
+const wind = { x: 0, y: 0 };          // current wind (px/frame)
+const wTarget = { x: 0, y: 0 };       // target (set by tilt)
+let energy = 0;                        // 0..1, swirl intensity (decays)
+let lastShakeT = 0;
+
+function shake(strength = 1) {
+  energy = Math.min(1, energy + strength * 0.85);
+  // Kick every flake with a random impulse, biased upward
+  const angBase = Math.random() * Math.PI * 2;
+  for (let i = 0; i < N; i++) {
+    const a = angBase + (Math.random() - 0.5) * 1.6;
+    const v = (4 + Math.random() * 8) * strength;
+    svx[i] += Math.cos(a) * v;
+    svy[i] += Math.sin(a) * v - (3 + Math.random() * 3) * strength;
+  }
+  lastShakeT = performance.now();
+  hintEl.classList.add('is-gone');
+  pingShake();
+}
+
+// ─── Simulation step ──────────────────────────────────────────────────────
+function step(dt) {
+  const g = globeGeom();
+  const r2 = g.r * g.r;
+  // Lerp wind toward tilt-driven target
+  wind.x += (wTarget.x - wind.x) * 0.07;
+  wind.y += (wTarget.y - wind.y) * 0.07;
+  // Energy decays
+  energy *= 0.985;
+
+  for (let i = 0; i < N; i++) {
+    // Sine drift adds a per-flake gentle wobble independent of global wind
+    sphase[i] += 0.012 + sr[i] * 0.0015;
+    const driftX = Math.sin(sphase[i]) * 0.35;
+
+    // Forces: gravity (subtle), wind, energy (random jitter scaled by intensity)
+    svx[i] += wind.x * 0.02 + driftX * 0.04;
+    svy[i] += 0.02 + wind.y * 0.02;
+    if (energy > 0.05) {
+      svx[i] += (Math.random() - 0.5) * energy * 0.6;
+      svy[i] += (Math.random() - 0.5) * energy * 0.6;
+    }
+
+    // Drag — air resistance scales mildly with size (bigger flakes settle faster)
+    const drag = 0.962 + sr[i] * 0.005;
+    svx[i] *= drag;
+    svy[i] *= drag;
+
+    // Cap velocity so a strong shake doesn't shoot a flake through the glass
+    const vmax = 14;
+    if (svx[i] > vmax) svx[i] = vmax;
+    if (svx[i] < -vmax) svx[i] = -vmax;
+    if (svy[i] > vmax) svy[i] = vmax;
+    if (svy[i] < -vmax) svy[i] = -vmax;
+
+    sx[i] += svx[i];
+    sy[i] += svy[i];
+
+    // Confine inside globe — soft bounce off the sphere wall
+    const dx = sx[i] - g.cx;
+    const dy = sy[i] - g.cy;
+    const distSq = dx * dx + dy * dy;
+    const inner = g.r - 4;
+    if (distSq > inner * inner) {
+      const dist = Math.sqrt(distSq);
+      const nx = dx / dist;
+      const ny = dy / dist;
+      sx[i] = g.cx + nx * inner;
+      sy[i] = g.cy + ny * inner;
+      // Reflect velocity, with damping so they don't pinball
+      const vn = svx[i] * nx + svy[i] * ny;
+      svx[i] -= (1 + 0.45) * vn * nx;
+      svy[i] -= (1 + 0.45) * vn * ny;
+      svx[i] *= 0.7;
+      svy[i] *= 0.7;
+    }
+  }
+}
+
+// ─── Render ───────────────────────────────────────────────────────────────
+function render() {
+  ctx.clearRect(0, 0, W, H);
+  const g = globeGeom();
+
+  // Background stars (subtle, fixed positions per session)
+  drawStars();
+
+  // Globe shadow on pedestal
+  ctx.beginPath();
+  ctx.ellipse(g.cx, g.cy + g.r * 0.94, g.r * 0.84, g.r * 0.18, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+  ctx.fill();
+
+  // Pedestal — sits below the globe
+  drawPedestal(g);
+
+  // Glass interior background — softer night sky inside
+  const gradInner = ctx.createRadialGradient(g.cx, g.cy - g.r * 0.2, g.r * 0.1, g.cx, g.cy, g.r);
+  gradInner.addColorStop(0,    '#1f2438');
+  gradInner.addColorStop(0.55, '#161a2c');
+  gradInner.addColorStop(1,    '#0a0d1a');
+  ctx.beginPath();
+  ctx.arc(g.cx, g.cy, g.r, 0, Math.PI * 2);
+  ctx.fillStyle = gradInner;
+  ctx.fill();
+
+  // Clip everything from here to inside the sphere
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(g.cx, g.cy, g.r - 2, 0, Math.PI * 2);
+  ctx.clip();
+
+  // Moon — soft glow, biased upper-right
+  drawMoon(g);
+
+  // Distant mountain silhouette (back layer)
+  drawMountains(g, g.cy + g.r * 0.10, '#1c2235', 0.62);
+  // Closer mountain (mid layer)
+  drawMountains(g, g.cy + g.r * 0.30, '#11152a', 0.85);
+
+  // Hill + tree (foreground)
+  drawHill(g);
+
+  // Snow piled on the globe floor (subtle drift, not animated for v1)
+  drawFloorSnow(g);
+
+  // Snowflakes
+  drawFlakes();
+
+  ctx.restore();
+
+  // Glass rim — drawn AFTER clip so it sits on top
+  drawGlass(g);
+
+  // Title + subtle engraving
+  drawBranding(g);
+
+  if (DEBUG) drawDebug();
+}
+
+// ─── Drawing helpers ──────────────────────────────────────────────────────
+const STARS = Array.from({ length: 50 }, () => ({
+  x: Math.random(), y: Math.random() * 0.45,    // top half only
+  r: 0.2 + Math.random() * 0.8,
+  twinkle: Math.random() * Math.PI * 2,
+}));
+function drawStars() {
+  for (const s of STARS) {
+    const x = s.x * W;
+    const y = s.y * H;
+    const a = 0.25 + 0.35 * Math.sin(performance.now() * 0.0008 + s.twinkle);
+    ctx.fillStyle = `rgba(232, 220, 200, ${a})`;
+    ctx.beginPath();
+    ctx.arc(x, y, s.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawMoon(g) {
+  const mx = g.cx + g.r * 0.42;
+  const my = g.cy - g.r * 0.55;
+  const mr = g.r * 0.13;
+  // Outer halo
+  const halo = ctx.createRadialGradient(mx, my, 0, mx, my, mr * 3.5);
+  halo.addColorStop(0,   'rgba(245, 232, 200, 0.42)');
+  halo.addColorStop(0.4, 'rgba(245, 232, 200, 0.12)');
+  halo.addColorStop(1,   'rgba(245, 232, 200, 0)');
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(mx, my, mr * 3.5, 0, Math.PI * 2);
+  ctx.fill();
+  // Moon disk
+  const disk = ctx.createRadialGradient(mx - mr * 0.3, my - mr * 0.3, 0, mx, my, mr);
+  disk.addColorStop(0, '#fff5e0');
+  disk.addColorStop(1, '#d8c39a');
+  ctx.fillStyle = disk;
+  ctx.beginPath();
+  ctx.arc(mx, my, mr, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawMountains(g, baseY, color, height) {
+  // Two-stop sawtooth, semi-randomized by horizontal frequency derived from baseY
+  ctx.beginPath();
+  ctx.moveTo(g.cx - g.r, baseY);
+  const steps = 12;
+  const span = g.r * 2;
+  const peak = g.r * 0.22 * height;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const px = g.cx - g.r + t * span;
+    // Use a deterministic "noise" — sin combos so it doesn't shimmer between frames
+    const py = baseY - peak * (
+      0.55 + 0.45 * Math.abs(Math.sin(t * 7.3 + baseY * 0.013) + 0.4 * Math.sin(t * 19 + baseY * 0.07))
+    );
+    ctx.lineTo(px, py);
+  }
+  ctx.lineTo(g.cx + g.r, baseY);
+  ctx.lineTo(g.cx + g.r, g.cy + g.r);
+  ctx.lineTo(g.cx - g.r, g.cy + g.r);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+function drawHill(g) {
+  const baseY = g.cy + g.r * 0.50;
+  // Hill body — gentle parabola
+  ctx.beginPath();
+  ctx.moveTo(g.cx - g.r, baseY);
+  for (let t = 0; t <= 1; t += 0.04) {
+    const x = g.cx - g.r + t * g.r * 2;
+    const lift = g.r * 0.18 * (1 - Math.pow(2 * (t - 0.5), 2));
+    ctx.lineTo(x, baseY - lift);
+  }
+  ctx.lineTo(g.cx + g.r, g.cy + g.r);
+  ctx.lineTo(g.cx - g.r, g.cy + g.r);
+  ctx.closePath();
+  ctx.fillStyle = '#080b18';
+  ctx.fill();
+
+  // Tree atop hill — fir silhouette
+  const tx = g.cx + g.r * 0.05;
+  const ty = baseY - g.r * 0.15;
+  drawFir(tx, ty, g.r * 0.18, '#0a0c1c');
+}
+
+function drawFir(x, y, h, color) {
+  // Three-tier fir made of triangles + slim trunk
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(x, y - h);
+  ctx.lineTo(x + h * 0.32, y - h * 0.55);
+  ctx.lineTo(x + h * 0.18, y - h * 0.55);
+  ctx.lineTo(x + h * 0.42, y - h * 0.18);
+  ctx.lineTo(x + h * 0.24, y - h * 0.18);
+  ctx.lineTo(x + h * 0.5,  y);
+  ctx.lineTo(x - h * 0.5,  y);
+  ctx.lineTo(x - h * 0.24, y - h * 0.18);
+  ctx.lineTo(x - h * 0.42, y - h * 0.18);
+  ctx.lineTo(x - h * 0.18, y - h * 0.55);
+  ctx.lineTo(x - h * 0.32, y - h * 0.55);
+  ctx.closePath();
+  ctx.fill();
+  // Snow caps on each tier
+  ctx.fillStyle = 'rgba(232, 226, 210, 0.55)';
+  ctx.beginPath();
+  ctx.moveTo(x, y - h);
+  ctx.lineTo(x + h * 0.07, y - h * 0.85);
+  ctx.lineTo(x - h * 0.07, y - h * 0.85);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawFloorSnow(g) {
+  // Soft white crescent across the globe floor — settled snow
+  const baseY = g.cy + g.r * 0.62;
+  ctx.beginPath();
+  ctx.ellipse(g.cx, baseY + g.r * 0.05, g.r * 1.05, g.r * 0.22, 0, 0, Math.PI * 2);
+  const grad = ctx.createLinearGradient(0, baseY - g.r * 0.05, 0, baseY + g.r * 0.18);
+  grad.addColorStop(0, 'rgba(232, 226, 210, 0.92)');
+  grad.addColorStop(1, 'rgba(232, 226, 210, 0.4)');
+  ctx.fillStyle = grad;
+  ctx.fill();
+}
+
+function drawFlakes() {
+  // Render in two passes for depth: small + dim first, big + bright on top.
+  // Cheap glow via a tiny outer shadow.
+  ctx.shadowColor = 'rgba(255, 250, 235, 0.45)';
+  ctx.shadowBlur = 4;
+  ctx.fillStyle = 'rgba(255, 252, 240, 0.95)';
+  for (let i = 0; i < N; i++) {
+    const r = sr[i];
+    if (r > 1.3) continue;
+    ctx.globalAlpha = sa[i];
+    ctx.beginPath();
+    ctx.arc(sx[i], sy[i], r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  for (let i = 0; i < N; i++) {
+    const r = sr[i];
+    if (r <= 1.3) continue;
+    ctx.globalAlpha = sa[i];
+    ctx.beginPath();
+    ctx.arc(sx[i], sy[i], r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
+}
+
+function drawGlass(g) {
+  // Outer rim — thin metallic ring
+  ctx.beginPath();
+  ctx.arc(g.cx, g.cy, g.r + 1, 0, Math.PI * 2);
+  ctx.lineWidth = 2.2;
+  ctx.strokeStyle = 'rgba(232, 218, 188, 0.75)';
+  ctx.stroke();
+
+  // Inner dark rim — adds depth
+  ctx.beginPath();
+  ctx.arc(g.cx, g.cy, g.r - 1, 0, Math.PI * 2);
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+  ctx.stroke();
+
+  // Top-left light highlight — long crescent
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(g.cx, g.cy, g.r - 1, Math.PI * 1.05, Math.PI * 1.55);
+  ctx.lineWidth = 3.5;
+  ctx.strokeStyle = 'rgba(255, 250, 230, 0.32)';
+  ctx.stroke();
+  ctx.restore();
+
+  // Lower-right reflection — soft arc
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(g.cx, g.cy, g.r - 6, Math.PI * 0.05, Math.PI * 0.30);
+  ctx.lineWidth = 2.2;
+  ctx.strokeStyle = 'rgba(255, 250, 230, 0.18)';
+  ctx.stroke();
+  ctx.restore();
+
+  // Specular dot near 11 o'clock
+  ctx.beginPath();
+  ctx.arc(g.cx - g.r * 0.55, g.cy - g.r * 0.55, 5, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255, 250, 230, 0.55)';
+  ctx.fill();
+}
+
+function drawPedestal(g) {
+  const top = g.cy + g.r * 0.92;
+  const base = Math.min(top + g.r * 0.32, H - 24);
+  const halfTop = g.r * 0.78;
+  const halfBase = g.r * 0.92;
+
+  // Body (warm dark wood)
+  ctx.beginPath();
+  ctx.moveTo(g.cx - halfTop, top);
+  ctx.lineTo(g.cx + halfTop, top);
+  ctx.lineTo(g.cx + halfBase, base);
+  ctx.lineTo(g.cx - halfBase, base);
+  ctx.closePath();
+  const woodGrad = ctx.createLinearGradient(0, top, 0, base);
+  woodGrad.addColorStop(0,    '#2a1d12');
+  woodGrad.addColorStop(0.45, '#3a281b');
+  woodGrad.addColorStop(1,    '#180f08');
+  ctx.fillStyle = woodGrad;
+  ctx.fill();
+
+  // Top facet — small ring around the globe base
+  ctx.beginPath();
+  ctx.ellipse(g.cx, top, halfTop, halfTop * 0.16, 0, 0, Math.PI * 2);
+  ctx.fillStyle = '#1a1109';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(g.cx, top - 1, halfTop, halfTop * 0.13, 0, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(232, 218, 188, 0.42)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Brass plaque
+  const plaqueW = halfTop * 1.15;
+  const plaqueH = (base - top) * 0.5;
+  const plaqueY = top + (base - top) * 0.28;
+  const plaqueGrad = ctx.createLinearGradient(0, plaqueY, 0, plaqueY + plaqueH);
+  plaqueGrad.addColorStop(0,   '#7a5c2f');
+  plaqueGrad.addColorStop(0.5, '#a8854a');
+  plaqueGrad.addColorStop(1,   '#5a4220');
+  ctx.fillStyle = plaqueGrad;
+  ctx.beginPath();
+  roundRect(ctx, g.cx - plaqueW / 2, plaqueY, plaqueW, plaqueH, 3);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+  ctx.lineWidth = 0.6;
+  ctx.stroke();
+
+  // Engraved title on plaque
+  ctx.save();
+  ctx.font = `${Math.max(11, plaqueH * 0.42)}px "Cormorant Garamond", "Times New Roman", serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  // Engraving — dark fill + faint highlight under
+  ctx.fillStyle = 'rgba(255, 240, 210, 0.18)';
+  ctx.fillText('SNOWGLOBE', g.cx, plaqueY + plaqueH * 0.5 + 0.6);
+  ctx.fillStyle = 'rgba(20, 12, 4, 0.92)';
+  ctx.fillText('SNOWGLOBE', g.cx, plaqueY + plaqueH * 0.5);
+  ctx.restore();
+}
+
+function drawBranding(g) {
+  // No top title — the engraved plaque on the pedestal handles identity.
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y, x + r, y, r);
+  ctx.closePath();
+}
+
+// ─── Audio: ambient breathing wind + shake rustle + bell ──────────────────
+let audioCtx = null;
+let ambientGain = null;
+let ambientNode = null;
+function ensureAudio() {
+  if (audioCtx) {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return;
+  }
+  const Ctor = window.AudioContext || window.webkitAudioContext;
+  if (!Ctor) return;
+  audioCtx = new Ctor();
+  startAmbient();
+}
+function startAmbient() {
+  // Brown-noise-ish source via biquad-filtered white noise buffer
+  const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 4, audioCtx.sampleRate);
+  const ch = buf.getChannelData(0);
+  let last = 0;
+  for (let i = 0; i < ch.length; i++) {
+    const w = (Math.random() * 2 - 1) * 0.5;
+    last = (last + 0.04 * w) / 1.04;
+    ch[i] = last * 3;
+  }
+  ambientNode = audioCtx.createBufferSource();
+  ambientNode.buffer = buf;
+  ambientNode.loop = true;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 320;
+  filter.Q.value = 0.4;
+  ambientGain = audioCtx.createGain();
+  ambientGain.gain.value = 0;
+  ambientNode.connect(filter).connect(ambientGain).connect(audioCtx.destination);
+  ambientNode.start();
+  scheduleAmbientBreathe();
+}
+// Breathing ambient: rise / hold / fall / silence — instant-play rule
+// (5-8 / 8-16 / 6-10 / 7-16 seconds, peak randomized).
+function scheduleAmbientBreathe() {
+  if (!audioCtx) return;
+  const now = audioCtx.currentTime;
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const rise   = rand(5, 8);
+  const hold   = rand(8, 16);
+  const fall   = rand(6, 10);
+  const silent = rand(7, 16);
+  const peak   = 0.06 + Math.random() * 0.04;     // very low ambient
+  ambientGain.gain.cancelScheduledValues(now);
+  ambientGain.gain.setValueAtTime(ambientGain.gain.value, now);
+  ambientGain.gain.linearRampToValueAtTime(peak, now + rise);
+  ambientGain.gain.setValueAtTime(peak, now + rise + hold);
+  ambientGain.gain.linearRampToValueAtTime(0, now + rise + hold + fall);
+  setTimeout(scheduleAmbientBreathe, (rise + hold + fall + silent) * 1000);
+}
+
+function pingShake() {
+  if (!audioCtx) return;
+  const now = audioCtx.currentTime;
+  // Rustle: shaped white noise burst
+  const len = 0.5;
+  const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * len, audioCtx.sampleRate);
+  const ch = buf.getChannelData(0);
+  for (let i = 0; i < ch.length; i++) {
+    const t = i / ch.length;
+    ch[i] = (Math.random() * 2 - 1) * Math.exp(-t * 4) * 0.6;
+  }
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  const flt = audioCtx.createBiquadFilter();
+  flt.type = 'bandpass';
+  flt.frequency.value = 1200;
+  flt.Q.value = 1.2;
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(0.18, now + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + len);
+  src.connect(flt).connect(gain).connect(audioCtx.destination);
+  src.start(now);
+  src.stop(now + len + 0.1);
+
+  // Bell shimmer — single high sine struck on each shake (random pentatonic note)
+  const PENT = [880, 988, 1175, 1319, 1480];
+  const f = PENT[Math.floor(Math.random() * PENT.length)];
+  const osc = audioCtx.createOscillator();
+  const og = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.value = f;
+  og.gain.setValueAtTime(0, now);
+  og.gain.linearRampToValueAtTime(0.07, now + 0.01);
+  og.gain.exponentialRampToValueAtTime(0.0001, now + 1.4);
+  osc.connect(og).connect(audioCtx.destination);
+  osc.start(now);
+  osc.stop(now + 1.5);
+}
+
+// ─── Sensor: Aigram System API postMessage bridge ─────────────────────────
+// iframe → host: "TG.ACCELEROMETER-<base64({refresh_rate})>"
+// host → iframe: "TG.ACCELEROMETER.CHANGED-<base64({x,y,z})>"
+// Matches reference_aigram_system_api.md / Marbles. Tilt → wTarget; shake
+// jolt > threshold → shake().
+const sensor = {
+  active: false, state: '—',
+  smooth: { x: 0, y: 0, z: 0 }, primed: false,
+  lastJolt: 0, lastShakeFire: 0,
+};
+const SENSOR_SMOOTH = 0.35;
+const G_NOM = 9.8;
+const TILT_GAIN = G_NOM * Math.SQRT1_2;
+const SHAKE_THRESHOLD = 13;
+function setupAigramBridge() {
+  if (!window.parent || window.parent === window) return;
+  window.addEventListener('message', (ev) => {
+    const raw = ev.data;
+    if (typeof raw !== 'string') return;
+    const PREFIX = 'TG.ACCELEROMETER.CHANGED-';
+    if (!raw.startsWith(PREFIX)) return;
+    let data;
+    try { data = JSON.parse(atob(raw.slice(PREFIX.length))); } catch { return; }
+    sensor.active = true;
+    sensor.state = 'changed';
+    if (!sensor.primed) {
+      sensor.smooth.x = data.x; sensor.smooth.y = data.y; sensor.smooth.z = data.z;
+      sensor.primed = true;
+    } else {
+      sensor.smooth.x += (data.x - sensor.smooth.x) * SENSOR_SMOOTH;
+      sensor.smooth.y += (data.y - sensor.smooth.y) * SENSOR_SMOOTH;
+      sensor.smooth.z += (data.z - sensor.smooth.z) * SENSOR_SMOOTH;
+    }
+    // Tilt → wind. Sign convention: tilt phone right → wind blows snow right.
+    // Canvas y is down, so flip sign so tilting top-of-phone-away pushes snow up.
+    const gxNorm = Math.max(-1, Math.min(1, sensor.smooth.x / TILT_GAIN));
+    const gyNorm = Math.max(-1, Math.min(1, sensor.smooth.y / TILT_GAIN));
+    wTarget.x = gxNorm * 1.2;
+    wTarget.y = -gyNorm * 1.2;
+    // Shake = magnitude minus gravity baseline
+    const mag = Math.sqrt(data.x * data.x + data.y * data.y + data.z * data.z);
+    const jolt = Math.abs(mag - G_NOM);
+    sensor.lastJolt = jolt;
+    const now = performance.now();
+    if (jolt > SHAKE_THRESHOLD && now - sensor.lastShakeFire > 600) {
+      sensor.lastShakeFire = now;
+      shake(Math.min(1.4, jolt / 14));
+    }
+  });
+  const sub = `TG.ACCELEROMETER-${btoa(JSON.stringify({ refresh_rate: 20 }))}`;
+  window.parent.postMessage(sub, '*');
+  sensor.state = 'requested';
+}
+setupAigramBridge();
+
+// ─── Touch fallback: drag-to-shake + tap-sparkle ──────────────────────────
+// In Safari standalone (no Aigram bridge), we still want a way to shake.
+// A fast pointer movement (high pixel velocity over a short window) =
+// shake. A simple tap = small sparkle / tiny shake.
+let pointerActive = false;
+let pdown = { x: 0, y: 0, t: 0 };
+let plast = { x: 0, y: 0, t: 0 };
+let dragVel = 0;
+function pointerStart(e) {
+  ensureAudio();
+  pointerActive = true;
+  pdown.x = plast.x = e.clientX;
+  pdown.y = plast.y = e.clientY;
+  pdown.t = plast.t = performance.now();
+  dragVel = 0;
+}
+function pointerMove(e) {
+  if (!pointerActive) return;
+  const now = performance.now();
+  const dt = Math.max(1, now - plast.t);
+  const dx = e.clientX - plast.x;
+  const dy = e.clientY - plast.y;
+  const v = Math.sqrt(dx * dx + dy * dy) / dt;     // px / ms
+  dragVel = dragVel * 0.65 + v * 0.35;
+  plast.x = e.clientX; plast.y = e.clientY; plast.t = now;
+  if (dragVel > 1.4 && now - sensor.lastShakeFire > 500) {
+    sensor.lastShakeFire = now;
+    shake(Math.min(1.2, dragVel / 2));
+    dragVel = 0;
+  }
+}
+function pointerEnd(e) {
+  if (!pointerActive) return;
+  pointerActive = false;
+  const now = performance.now();
+  const moved = Math.hypot(e.clientX - pdown.x, e.clientY - pdown.y);
+  const dur = now - pdown.t;
+  // Quick tap with little movement = sparkle (small puff of snowflakes)
+  if (moved < 12 && dur < 280) {
+    sparkleAt(e.clientX, e.clientY);
+  }
+}
+canvas.addEventListener('pointerdown', pointerStart);
+canvas.addEventListener('pointermove', pointerMove);
+canvas.addEventListener('pointerup',   pointerEnd);
+canvas.addEventListener('pointercancel', pointerEnd);
+
+function sparkleAt(x, y) {
+  // Gently push the nearest 30 flakes outward from the touch point.
+  const g = globeGeom();
+  const dx0 = x - g.cx, dy0 = y - g.cy;
+  if (dx0 * dx0 + dy0 * dy0 > g.r * g.r) return;   // tap outside dome → ignore
+  hintEl.classList.add('is-gone');
+  // Find K nearest flakes, kick them outward
+  const K = 28;
+  const idx = [];
+  for (let i = 0; i < N; i++) {
+    const dx = sx[i] - x;
+    const dy = sy[i] - y;
+    idx.push({ i, d: dx * dx + dy * dy });
+  }
+  idx.sort((a, b) => a.d - b.d);
+  for (let k = 0; k < K && k < idx.length; k++) {
+    const i = idx[k].i;
+    const dx = sx[i] - x;
+    const dy = sy[i] - y;
+    const d = Math.max(0.5, Math.sqrt(dx * dx + dy * dy));
+    const force = 6 + Math.random() * 4;
+    svx[i] += (dx / d) * force;
+    svy[i] += (dy / d) * force;
+  }
+  energy = Math.min(1, energy + 0.18);
+}
+
+// ─── Debug overlay ────────────────────────────────────────────────────────
+function drawDebug() {
+  const lines = [
+    'SNOWGLOBE',
+    `dpr: ${DPR.toFixed(2)}  ${W}×${H}`,
+    `aigram: ${sensor.state}`,
+    `active: ${sensor.active ? 'yes' : 'no'}`,
+    `smooth: ${sensor.smooth.x.toFixed(1)}/${sensor.smooth.y.toFixed(1)}/${sensor.smooth.z.toFixed(1)}`,
+    `wind: ${wind.x.toFixed(2)} / ${wind.y.toFixed(2)}`,
+    `jolt: ${sensor.lastJolt.toFixed(1)}  energy: ${energy.toFixed(2)}`,
+  ];
+  debugEl.textContent = lines.join('\n');
+}
+
+// ─── Main loop ────────────────────────────────────────────────────────────
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(33, now - last);
+  last = now;
+  step(dt);
+  render();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// ─── Attract mode ─────────────────────────────────────────────────────────
+// Bounded — single welcome shake at mount, then idle. Don't run setInterval
+// forever waiting for first touch (the games-list preloads us in the
+// background and would fill the dome over time). See feedback_game_preload_idle.md.
+setTimeout(() => {
+  // Soft initial swirl so the user sees motion immediately
+  shake(0.6);
+}, 380);
+</script>
+</body>
+</html>

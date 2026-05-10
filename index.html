@@ -453,15 +453,14 @@ function render() {
   drawFloor(g, t);
   drawFlakes(t);
 
-  // Sphere shading INSIDE the clip — sells volume by darkening the lower-right
-  // (the side away from the implied upper-left light source) and washing a
-  // soft warm light through the glass on the upper-left.
-  drawSphereShading(g);
+  // Glass surface effects — pulled inside the clip so they belong to the
+  // dome rather than read as decals stuck on top.
+  drawSphereShading(g);     // dark vignette lower-right + soft warm wash upper-left
+  drawGlassSurface(g);      // Fresnel rim halo + window-reflection streak
 
   ctx.restore();
 
-  drawGlass(g, t);
-  drawGlassSpec(g);
+  drawGlass(g, t);          // simplified outer brass rim only
 
   if (DEBUG) drawDebug();
 }
@@ -780,99 +779,84 @@ function drawStardust(t) {
 }
 
 function drawGlass(g, t) {
+  // Single brass rim. Earlier versions stacked an inner dark stroke + a
+  // top-left highlight crescent + lower-right reflection arc, but those
+  // fought with the new Fresnel halo (which already brightens the entire
+  // perimeter from inside). Keep it simple — one frame line.
   ctx.beginPath();
   ctx.arc(g.cx, g.cy, g.r + 1, 0, Math.PI * 2);
-  ctx.lineWidth = 2.2;
-  ctx.strokeStyle = 'rgba(232, 218, 188, 0.75)';
+  ctx.lineWidth = 1.8;
+  ctx.strokeStyle = 'rgba(232, 218, 188, 0.62)';
   ctx.stroke();
-
-  ctx.beginPath();
-  ctx.arc(g.cx, g.cy, g.r - 1, 0, Math.PI * 2);
-  ctx.lineWidth = 1;
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
-  ctx.stroke();
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(g.cx, g.cy, g.r - 1, Math.PI * 1.02, Math.PI * 1.62);
-  ctx.lineWidth = 3.8;
-  ctx.strokeStyle = 'rgba(255, 250, 230, 0.48)';
-  ctx.stroke();
-  ctx.restore();
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(g.cx, g.cy, g.r - 6, Math.PI * 0.05, Math.PI * 0.30);
-  ctx.lineWidth = 2.2;
-  ctx.strokeStyle = 'rgba(255, 250, 230, 0.18)';
-  ctx.stroke();
-  ctx.restore();
-
-  // (Specular spots are now drawn separately in drawGlassSpec, after rims)
 }
 
 // Sphere depth shading — pulled inside the clip so it darkens the scene
-// itself, not just the glass surface. Selling the dome's curvature: the
-// implied light is upper-left, so the lower-right gets a soft fall-off.
+// itself, not just the glass surface. The implied light is upper-left, so
+// the lower-right gets a soft fall-off and the upper-left gains a gentle
+// warm wash. Both are deliberately subtle here; the actual "glass" feeling
+// comes from drawGlassSurface below.
 function drawSphereShading(g) {
-  // Subtle outer dark vignette anchored at lower-right
+  // Outer dark vignette anchored at lower-right — implies sphere curvature
   const sg = ctx.createRadialGradient(
-    g.cx + g.r * 0.35, g.cy + g.r * 0.35, g.r * 0.45,
-    g.cx + g.r * 0.35, g.cy + g.r * 0.35, g.r * 1.45
+    g.cx + g.r * 0.35, g.cy + g.r * 0.35, g.r * 0.40,
+    g.cx + g.r * 0.35, g.cy + g.r * 0.35, g.r * 1.50
   );
-  sg.addColorStop(0,   'rgba(0, 0, 0, 0)');
-  sg.addColorStop(0.65, 'rgba(0, 0, 0, 0.18)');
-  sg.addColorStop(1,    'rgba(0, 0, 0, 0.42)');
+  sg.addColorStop(0,    'rgba(0, 0, 0, 0)');
+  sg.addColorStop(0.60, 'rgba(0, 0, 0, 0.16)');
+  sg.addColorStop(1,    'rgba(0, 0, 0, 0.40)');
   ctx.fillStyle = sg;
   ctx.fillRect(g.cx - g.r, g.cy - g.r, g.r * 2, g.r * 2);
 
-  // Soft warm wash from the upper-left — like ambient room light through glass
+  // Faint warm wash from the upper-left — kept low alpha so it doesn't
+  // compete with the Fresnel rim and streak for "where's the light?".
   const lw = ctx.createRadialGradient(
     g.cx - g.r * 0.40, g.cy - g.r * 0.45, 0,
-    g.cx - g.r * 0.40, g.cy - g.r * 0.45, g.r * 0.95
+    g.cx - g.r * 0.40, g.cy - g.r * 0.45, g.r * 1.0
   );
-  lw.addColorStop(0,   'rgba(255, 248, 230, 0.20)');
-  lw.addColorStop(0.45, 'rgba(255, 248, 230, 0.08)');
+  lw.addColorStop(0,    'rgba(255, 248, 230, 0.10)');
+  lw.addColorStop(0.50, 'rgba(255, 248, 230, 0.04)');
   lw.addColorStop(1,    'rgba(255, 248, 230, 0)');
   ctx.fillStyle = lw;
   ctx.fillRect(g.cx - g.r, g.cy - g.r, g.r * 2, g.r * 2);
 }
 
-// Sharp specular reflections — drawn AFTER the rims so they sit on the very
-// top. A real glass orb under directional light has one tight bright kernel
-// plus one or two smaller reflected sparkles.
-function drawGlassSpec(g) {
-  // Primary streak ~ 10 o'clock — elongated highlight
-  const sx1 = g.cx - g.r * 0.50;
-  const sy1 = g.cy - g.r * 0.55;
-  ctx.save();
-  ctx.translate(sx1, sy1);
-  ctx.rotate(-0.55);
-  const spec = ctx.createRadialGradient(0, 0, 0, 0, 0, g.r * 0.20);
-  spec.addColorStop(0,    'rgba(255, 255, 255, 0.96)');
-  spec.addColorStop(0.35, 'rgba(255, 255, 255, 0.55)');
-  spec.addColorStop(0.75, 'rgba(255, 255, 255, 0.12)');
-  spec.addColorStop(1,    'rgba(255, 255, 255, 0)');
-  ctx.fillStyle = spec;
+// Glass surface — Fresnel rim halo (uniform around the perimeter) + a long
+// soft window-reflection streak. Replaces the old "stuck on" specular
+// ellipses, which read as Photoshop highlights rather than real glass.
+function drawGlassSurface(g) {
+  // 1) Wide soft Fresnel halo — wraps the entire dome perimeter from inside.
+  //    Drawn as a fat low-alpha stroke so the brightness fades inward.
   ctx.beginPath();
-  ctx.ellipse(0, 0, g.r * 0.07, g.r * 0.20, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
+  ctx.arc(g.cx, g.cy, g.r - 7, 0, Math.PI * 2);
+  ctx.lineWidth = 12;
+  ctx.strokeStyle = 'rgba(255, 250, 232, 0.05)';
+  ctx.stroke();
 
-  // Secondary sparkle near 1 o'clock — smaller, dimmer
-  const sx2 = g.cx + g.r * 0.50;
-  const sy2 = g.cy - g.r * 0.42;
-  ctx.save();
-  ctx.translate(sx2, sy2);
-  ctx.rotate(0.4);
-  const sp2 = ctx.createRadialGradient(0, 0, 0, 0, 0, g.r * 0.10);
-  sp2.addColorStop(0,   'rgba(255, 255, 255, 0.55)');
-  sp2.addColorStop(0.6, 'rgba(255, 255, 255, 0.15)');
-  sp2.addColorStop(1,   'rgba(255, 255, 255, 0)');
-  ctx.fillStyle = sp2;
+  // 2) Tight bright Fresnel kernel — thin bright stroke at the very rim.
+  //    This is what reads as "glass edge catching light", and because it's
+  //    uniform around the whole perimeter, it doesn't look directional.
   ctx.beginPath();
-  ctx.ellipse(0, 0, g.r * 0.035, g.r * 0.10, 0, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.arc(g.cx, g.cy, g.r - 2, 0, Math.PI * 2);
+  ctx.lineWidth = 1.6;
+  ctx.strokeStyle = 'rgba(255, 252, 236, 0.22)';
+  ctx.stroke();
+
+  // 3) Window-reflection streak — long, diffuse, diagonal across the upper
+  //    half. A single elongated band reads as a window/light-source glare
+  //    diffused through the curve, rather than a hot spot decal.
+  ctx.save();
+  ctx.translate(g.cx - g.r * 0.18, g.cy - g.r * 0.32);
+  ctx.rotate(-0.92);
+  const len = g.r * 1.55;
+  const wid = g.r * 0.42;
+  const grad = ctx.createLinearGradient(0, -wid, 0, wid);
+  grad.addColorStop(0,    'rgba(255, 255, 255, 0)');
+  grad.addColorStop(0.42, 'rgba(255, 255, 255, 0.07)');
+  grad.addColorStop(0.50, 'rgba(255, 255, 255, 0.14)');
+  grad.addColorStop(0.58, 'rgba(255, 255, 255, 0.07)');
+  grad.addColorStop(1,    'rgba(255, 255, 255, 0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(-len / 2, -wid, len, wid * 2);
   ctx.restore();
 }
 

@@ -364,7 +364,7 @@ function globeGeom() {
 }
 
 // ─── Particles ────────────────────────────────────────────────────────────
-const N = 320;
+const N = 380;
 const sx = new Float32Array(N);
 const sy = new Float32Array(N);
 const svx = new Float32Array(N);
@@ -523,12 +523,19 @@ function render() {
   drawMountains(g, g.cy + g.r * 0.30, t.mountainsNear, 0.85);
   drawHill(g, t);
   drawFloor(g, t);
+
+  // Lighting environment (sphere depth + glass surface catches) goes
+  // BEHIND the flakes, so the snow draws against a properly-lit backdrop.
+  // Earlier the catches were on top, washing the small flakes out and
+  // making them look sparse.
+  drawSphereShading(g);
+  drawGlassCatches(g);
+
   drawFlakes(t);
 
-  // Glass surface effects — pulled inside the clip so they belong to the
-  // dome rather than read as decals stuck on top.
-  drawSphereShading(g);     // dark vignette lower-right + soft warm wash upper-left
-  drawGlassSurface(g);      // Fresnel rim halo + window-reflection streak
+  // Rim halos (Fresnel) stay on TOP — they're the glass edge "biting"
+  // into the dome, which should occlude the contents at the perimeter.
+  drawGlassRim(g);
 
   ctx.restore();
 
@@ -892,31 +899,15 @@ function drawSphereShading(g) {
   ctx.fillRect(g.cx - g.r, g.cy - g.r, g.r * 2, g.r * 2);
 }
 
-// Glass surface — three layers, all confined to the front of the dome:
-//   1) Fresnel rim halo (uniform perimeter)
-//   2) Front catch: broad, very soft radial glow where the implied light
-//      hits the visible face of the glass. Wide gradient + low peak alpha
-//      so the edges dissolve smoothly — no decal feel.
-//   3) Subtle elongation streak nested inside (2), giving a hint of window
-//      shape without reading as a back-side reflection.
-function drawGlassSurface(g) {
-  // 1) Wide soft Fresnel halo — wraps the entire dome perimeter from inside.
-  ctx.beginPath();
-  ctx.arc(g.cx, g.cy, g.r - 7, 0, Math.PI * 2);
-  ctx.lineWidth = 12;
-  ctx.strokeStyle = 'rgba(255, 250, 232, 0.05)';
-  ctx.stroke();
-
-  // 2) Tight bright Fresnel kernel at the very rim.
-  ctx.beginPath();
-  ctx.arc(g.cx, g.cy, g.r - 2, 0, Math.PI * 2);
-  ctx.lineWidth = 1.6;
-  ctx.strokeStyle = 'rgba(255, 252, 236, 0.22)';
-  ctx.stroke();
-
-  // 3) Front catch — broad, very soft radial glow at the upper-left front
-  //    of the dome. This is the main "this is glass" cue. Wide extent + low
-  //    peak alpha + no hard edge.
+// Glass surface effects, split into two passes so flakes draw between them:
+//   - drawGlassCatches: front + back radial glows + streak (rendered BEHIND
+//     the flakes, treated as the dome's lighting environment)
+//   - drawGlassRim: Fresnel halos around the perimeter (rendered ON TOP of
+//     flakes, so the rim properly occludes contents at the edge)
+function drawGlassCatches(g) {
+  // Front catch — broad, very soft radial glow at the upper-left front of
+  // the dome. The main "this is glass" cue. Wide extent + low peak alpha
+  // + no hard edge.
   const fx = g.cx - g.r * 0.34;
   const fy = g.cy - g.r * 0.42;
   const front = ctx.createRadialGradient(fx, fy, 0, fx, fy, g.r * 0.58);
@@ -927,9 +918,8 @@ function drawGlassSurface(g) {
   ctx.fillStyle = front;
   ctx.fillRect(g.cx - g.r, g.cy - g.r, g.r * 2, g.r * 2);
 
-  // 4) Subtle elongation hint — a smaller streak nested inside (3) so the
-  //    front catch has a hint of "window shape" without sweeping across the
-  //    whole dome (which previously read as a back-side reflection).
+  // Subtle elongation hint nested inside the front catch — small streak so
+  // the catch has a faint window shape without sweeping across the dome.
   ctx.save();
   ctx.translate(fx, fy);
   ctx.rotate(-0.95);
@@ -945,12 +935,9 @@ function drawGlassSurface(g) {
   ctx.fillRect(-len / 2, -wid, len, wid * 2);
   ctx.restore();
 
-  // 5) Back catch — smaller, dimmer wraparound glow on the side opposite
-  //    the front catch. Real glass orbs photographed under directional
-  //    light pick up a secondary specular here from light wrapping around
-  //    the sphere, giving the dome more depth. Half the extent and roughly
-  //    half the alpha of the front catch — should read as "the back side
-  //    is also catching some light", never compete with the front.
+  // Back catch — smaller, dimmer wraparound glow on the side opposite the
+  // front. Half extent + half peak alpha → reads as light wrapping around
+  // the sphere, never competes for attention.
   const bx = g.cx + g.r * 0.30;
   const by = g.cy + g.r * 0.35;
   const back = ctx.createRadialGradient(bx, by, 0, bx, by, g.r * 0.34);
@@ -960,6 +947,22 @@ function drawGlassSurface(g) {
   back.addColorStop(1,    'rgba(255, 255, 255, 0)');
   ctx.fillStyle = back;
   ctx.fillRect(g.cx - g.r, g.cy - g.r, g.r * 2, g.r * 2);
+}
+
+function drawGlassRim(g) {
+  // Wide soft Fresnel halo — wraps the entire dome perimeter from inside.
+  ctx.beginPath();
+  ctx.arc(g.cx, g.cy, g.r - 7, 0, Math.PI * 2);
+  ctx.lineWidth = 12;
+  ctx.strokeStyle = 'rgba(255, 250, 232, 0.05)';
+  ctx.stroke();
+
+  // Tight bright Fresnel kernel at the very rim.
+  ctx.beginPath();
+  ctx.arc(g.cx, g.cy, g.r - 2, 0, Math.PI * 2);
+  ctx.lineWidth = 1.6;
+  ctx.strokeStyle = 'rgba(255, 252, 236, 0.22)';
+  ctx.stroke();
 }
 
 function drawPedestal(g, t) {

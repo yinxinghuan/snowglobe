@@ -17,10 +17,15 @@
     -webkit-user-select: none;
     touch-action: none;
     font-family: "Cormorant Garamond", "Times New Roman", serif;
-    background: radial-gradient(ellipse at 50% 30%, #14182a 0%, #07091a 70%, #02030a 100%);
+    background: #02030a;
     position: relative;
     color: #e8d4b5;
+    transition: background 1.2s ease;
   }
+  body[data-theme="winter"] { background: radial-gradient(ellipse at 50% 30%, #14182a 0%, #07091a 70%, #02030a 100%); }
+  body[data-theme="sakura"] { background: radial-gradient(ellipse at 50% 30%, #2a1224 0%, #160a16 70%, #08040b 100%); }
+  body[data-theme="cosmos"] { background: radial-gradient(ellipse at 50% 30%, #14102a 0%, #06041a 70%, #01010a 100%); }
+
   #stage {
     position: absolute;
     inset: 0;
@@ -28,6 +33,46 @@
     height: 100%;
     display: block;
   }
+
+  .switcher {
+    position: absolute;
+    top: max(18px, env(safe-area-inset-top));
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.30);
+    backdrop-filter: blur(14px) saturate(120%);
+    -webkit-backdrop-filter: blur(14px) saturate(120%);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: 0 1px 8px rgba(0, 0, 0, 0.25);
+    z-index: 10;
+  }
+  .switcher-btn {
+    width: 36px;
+    height: 36px;
+    border: 0;
+    background: transparent;
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: rgba(232, 226, 210, 0.45);
+    transition: color 0.32s ease, background 0.3s ease;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    padding: 0;
+  }
+  .switcher-btn:hover { color: rgba(232, 226, 210, 0.9); }
+  .switcher-btn.is-active { background: rgba(255, 255, 255, 0.10); }
+  .switcher-btn.is-active[data-theme="winter"] { color: #ddeaff; }
+  .switcher-btn.is-active[data-theme="sakura"] { color: #ffd0e0; }
+  .switcher-btn.is-active[data-theme="cosmos"] { color: #d8c0ff; }
+  .switcher-btn svg { display: block; width: 20px; height: 20px; stroke-width: 1.6; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; }
+
   .hint {
     position: absolute;
     bottom: calc(max(20px, env(safe-area-inset-bottom)) + 18px);
@@ -39,7 +84,6 @@
     color: rgba(232, 212, 181, 0.42);
     pointer-events: none;
     z-index: 5;
-    opacity: 0;
     animation: hintBreathe 4s ease-in-out 1.2s infinite;
     text-align: center;
     white-space: nowrap;
@@ -49,6 +93,33 @@
     50% { opacity: 0.7; }
   }
   .hint.is-gone { animation: none; opacity: 0; transition: opacity 1.6s ease; }
+
+  .perm {
+    position: absolute;
+    bottom: calc(max(20px, env(safe-area-inset-bottom)) + 64px);
+    left: 50%;
+    transform: translateX(-50%);
+    display: none;
+    align-items: center;
+    gap: 6px;
+    padding: 9px 16px;
+    font-family: ui-monospace, "JetBrains Mono", monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(255, 246, 220, 0.96);
+    background: rgba(232, 200, 130, 0.16);
+    border: 1px solid rgba(232, 200, 130, 0.45);
+    border-radius: 999px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    cursor: pointer;
+    z-index: 12;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .perm.is-show { display: flex; }
+  .perm:hover { background: rgba(232, 200, 130, 0.26); }
+
   .debug {
     position: absolute;
     top: 12px;
@@ -69,9 +140,21 @@
   .debug.is-on { display: block; }
 </style>
 </head>
-<body>
+<body data-theme="winter">
 <canvas id="stage"></canvas>
+<div class="switcher" id="switcher">
+  <button class="switcher-btn is-active" data-theme="winter" aria-label="winter night">
+    <svg viewBox="0 0 24 24"><path d="M12 2v20M4.93 4.93l14.14 14.14M2 12h20M4.93 19.07L19.07 4.93M7 5l5 1 5-1M7 19l5-1 5 1"/></svg>
+  </button>
+  <button class="switcher-btn" data-theme="sakura" aria-label="sakura dusk">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.2"/><ellipse cx="12" cy="6" rx="2.4" ry="3.4"/><ellipse cx="17.2" cy="9.7" rx="2.4" ry="3.4" transform="rotate(72 17.2 9.7)"/><ellipse cx="15.2" cy="16.3" rx="2.4" ry="3.4" transform="rotate(144 15.2 16.3)"/><ellipse cx="8.8" cy="16.3" rx="2.4" ry="3.4" transform="rotate(216 8.8 16.3)"/><ellipse cx="6.8" cy="9.7" rx="2.4" ry="3.4" transform="rotate(288 6.8 9.7)"/></svg>
+  </button>
+  <button class="switcher-btn" data-theme="cosmos" aria-label="cosmos drift">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><ellipse cx="12" cy="12" rx="9.5" ry="3" transform="rotate(-22 12 12)"/></svg>
+  </button>
+</div>
 <div class="hint" id="hint">Shake · Tilt</div>
+<button class="perm" id="permBtn">⤲ enable tilt &amp; shake</button>
 <div class="debug" id="debug"></div>
 <script>
 'use strict';
@@ -81,6 +164,8 @@ const canvas = document.getElementById('stage');
 const ctx = canvas.getContext('2d');
 const hintEl = document.getElementById('hint');
 const debugEl = document.getElementById('debug');
+const permBtn = document.getElementById('permBtn');
+const switcherEl = document.getElementById('switcher');
 const params = new URLSearchParams(location.search);
 const DEBUG = params.get('debug') === '1';
 if (DEBUG) debugEl.classList.add('is-on');
@@ -100,59 +185,138 @@ function resize() {
 resize();
 window.addEventListener('resize', resize);
 
+// ─── Themes ───────────────────────────────────────────────────────────────
+// Each theme defines colors, particle shape, scene content and audio. Drawing
+// functions branch on theme.id where the difference is structural (e.g. tree
+// vs no tree); everywhere else they read colors off `theme`.
+const THEMES = {
+  winter: {
+    id: 'winter',
+    accent: '#ddeaff',
+    particle: { type: 'snow', color: 'rgba(255, 252, 240, 0.95)', glow: 'rgba(255, 250, 235, 0.45)' },
+    skyInner: ['#1f2438', '#161a2c', '#0a0d1a'],
+    moon: { x: 0.42, y: -0.55, r: 0.13, disk: ['#fff5e0', '#d8c39a'], halo: 'rgba(245, 232, 200, 0.42)' },
+    mountainsFar: '#1c2235',
+    mountainsNear: '#11152a',
+    hill: '#080b18',
+    tree: '#0a0c1c',
+    treeSnow: 'rgba(232, 226, 210, 0.55)',
+    floor: ['rgba(232, 226, 210, 0.92)', 'rgba(232, 226, 210, 0.4)'],
+    pedestal: { topRing: '#1a1109', wood: ['#2a1d12', '#3a281b', '#180f08'], rim: 'rgba(232, 218, 188, 0.42)',
+                plaque: ['#7a5c2f', '#a8854a', '#5a4220'], plaqueText: 'SNOWGLOBE',
+                plaqueInk: 'rgba(20, 12, 4, 0.92)', plaqueHi: 'rgba(255, 240, 210, 0.18)' },
+    audio: { ambientCutoff: 320, bellTones: [880, 988, 1175, 1319, 1480], bellAttack: 0.01, bellDecay: 1.4, bellType: 'sine', bellPeak: 0.07 },
+    starsHidden: false,
+  },
+  sakura: {
+    id: 'sakura',
+    accent: '#ffd0e0',
+    particle: { type: 'petal', color: 'rgba(255, 200, 215, 0.92)', glow: 'rgba(255, 220, 230, 0.0)' },
+    skyInner: ['#3a1f3c', '#5a2b48', '#8a3a52'],
+    moon: { x: -0.05, y: -0.50, r: 0.18, disk: ['#fff5e0', '#ffc295'], halo: 'rgba(255, 200, 170, 0.55)' },
+    mountainsFar: '#5a2c48',
+    mountainsNear: '#3a1d34',
+    hill: '#251525',
+    tree: 'cherry',          // structural variant
+    treeTrunk: '#2a1218',
+    treeBlossom: '#ffc6d8',
+    floor: ['rgba(255, 215, 220, 0.86)', 'rgba(255, 200, 210, 0.42)'],
+    pedestal: { topRing: '#1a0a0c', wood: ['#3a1d20', '#4d2a28', '#1c0e10'], rim: 'rgba(232, 188, 188, 0.40)',
+                plaque: ['#a45a48', '#d49278', '#7a3838'], plaqueText: 'SAKURA NIGHT',
+                plaqueInk: 'rgba(28, 8, 14, 0.92)', plaqueHi: 'rgba(255, 220, 220, 0.20)' },
+    audio: { ambientCutoff: 280, bellTones: [659, 740, 880, 988, 1109], bellAttack: 0.005, bellDecay: 2.0, bellType: 'triangle', bellPeak: 0.06 },
+    starsHidden: true,
+  },
+  cosmos: {
+    id: 'cosmos',
+    accent: '#d8c0ff',
+    particle: { type: 'star', color: 'rgba(220, 230, 255, 0.95)', glow: 'rgba(180, 220, 255, 0.7)' },
+    skyInner: ['#1c1238', '#180e30', '#080418'],
+    moon: { x: 0.42, y: -0.50, r: 0.16, disk: ['#e0c4f0', '#7a5cb0'], halo: 'rgba(170, 130, 220, 0.42)', ring: true },
+    mountainsFar: 'rgba(60, 35, 90, 0.42)',
+    mountainsNear: 'rgba(35, 18, 55, 0.78)',
+    hill: '#0a0618',
+    tree: 'spire',           // structural variant — crystal needle
+    treeTrunk: '#604080',
+    treeBlossom: '#d0a8ff',
+    floor: ['rgba(180, 150, 220, 0.65)', 'rgba(120, 90, 180, 0.25)'],
+    pedestal: { topRing: '#0a0814', wood: ['#1c1428', '#2a2038', '#0e0814'], rim: 'rgba(216, 192, 255, 0.45)',
+                plaque: ['#5840a0', '#9080d0', '#3c2880'], plaqueText: 'COSMOS DRIFT',
+                plaqueInk: 'rgba(8, 4, 24, 0.92)', plaqueHi: 'rgba(216, 200, 255, 0.22)' },
+    audio: { ambientCutoff: 220, bellTones: [523, 622, 740, 932, 1109], bellAttack: 0.02, bellDecay: 2.6, bellType: 'sine', bellPeak: 0.06 },
+    starsHidden: false,
+    starColor: 'rgba(216, 192, 255, %a%)',
+  },
+};
+let currentTheme = THEMES.winter;
+function setTheme(id) {
+  if (!THEMES[id]) return;
+  currentTheme = THEMES[id];
+  document.body.setAttribute('data-theme', id);
+  for (const btn of switcherEl.querySelectorAll('.switcher-btn')) {
+    btn.classList.toggle('is-active', btn.dataset.theme === id);
+  }
+  // Audio retunes on next bell
+  hintEl.classList.add('is-gone');
+}
+for (const btn of switcherEl.querySelectorAll('.switcher-btn')) {
+  btn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    ensureAudio();
+    setTheme(btn.dataset.theme);
+    // A small swirl on theme change so the new look catches the eye
+    shake(0.4);
+  });
+}
+
 // ─── Globe geometry — derived from viewport, recomputed each frame ────────
 function globeGeom() {
-  // Globe is the dominant element. Pedestal sits below.
-  // Layout: 7% top margin, globe takes ~70% of min(W, H), pedestal underneath.
   const cx = W / 2;
   const usable = Math.min(W * 0.92, H * 0.72);
   const r = usable / 2;
-  // Vertical center of globe — biased upward to leave room for pedestal.
   const cy = H * 0.42;
   return { cx, cy, r };
 }
 
-// ─── Snow particles ───────────────────────────────────────────────────────
-// Each flake lives entirely inside the globe (we clip on render). State is
-// kept in flat typed arrays for tight memory + fast iteration.
-const N = 240;                                    // number of snowflakes
+// ─── Particles ────────────────────────────────────────────────────────────
+const N = 240;
 const sx = new Float32Array(N);
 const sy = new Float32Array(N);
 const svx = new Float32Array(N);
 const svy = new Float32Array(N);
-const sr = new Float32Array(N);                   // radius (size)
-const sa = new Float32Array(N);                   // alpha
-const sphase = new Float32Array(N);               // drift sine phase
+const sr = new Float32Array(N);
+const sa = new Float32Array(N);
+const sphase = new Float32Array(N);
+const srot = new Float32Array(N);                 // petal rotation, also used as star twinkle phase
 
 function seedFlakes() {
   const g = globeGeom();
   for (let i = 0; i < N; i++) {
-    // Uniform inside the disc
     const ang = Math.random() * Math.PI * 2;
     const rad = Math.sqrt(Math.random()) * g.r * 0.95;
     sx[i] = g.cx + Math.cos(ang) * rad;
     sy[i] = g.cy + Math.sin(ang) * rad;
     svx[i] = (Math.random() - 0.5) * 0.3;
     svy[i] = 0.2 + Math.random() * 0.8;
-    // Bimodal sizes — most small + occasional fat puff
     sr[i] = Math.random() < 0.18
       ? 1.6 + Math.random() * 1.4
       : 0.5 + Math.random() * 1.0;
     sa[i] = 0.55 + Math.random() * 0.4;
     sphase[i] = Math.random() * Math.PI * 2;
+    srot[i] = Math.random() * Math.PI * 2;
   }
 }
 seedFlakes();
 
-// ─── Wind (drift) field — driven by tilt + shake impulse ──────────────────
-const wind = { x: 0, y: 0 };          // current wind (px/frame)
-const wTarget = { x: 0, y: 0 };       // target (set by tilt)
-let energy = 0;                        // 0..1, swirl intensity (decays)
+// ─── Wind & energy ────────────────────────────────────────────────────────
+const wind = { x: 0, y: 0 };
+const wTarget = { x: 0, y: 0 };
+let energy = 0;
 let lastShakeT = 0;
 
 function shake(strength = 1) {
   energy = Math.min(1, energy + strength * 0.85);
-  // Kick every flake with a random impulse, biased upward
   const angBase = Math.random() * Math.PI * 2;
   for (let i = 0; i < N; i++) {
     const a = angBase + (Math.random() - 0.5) * 1.6;
@@ -165,22 +329,17 @@ function shake(strength = 1) {
   pingShake();
 }
 
-// ─── Simulation step ──────────────────────────────────────────────────────
-function step(dt) {
+// ─── Simulation ──────────────────────────────────────────────────────────
+function step() {
   const g = globeGeom();
-  const r2 = g.r * g.r;
-  // Lerp wind toward tilt-driven target
   wind.x += (wTarget.x - wind.x) * 0.07;
   wind.y += (wTarget.y - wind.y) * 0.07;
-  // Energy decays
   energy *= 0.985;
 
   for (let i = 0; i < N; i++) {
-    // Sine drift adds a per-flake gentle wobble independent of global wind
     sphase[i] += 0.012 + sr[i] * 0.0015;
     const driftX = Math.sin(sphase[i]) * 0.35;
 
-    // Forces: gravity (subtle), wind, energy (random jitter scaled by intensity)
     svx[i] += wind.x * 0.02 + driftX * 0.04;
     svy[i] += 0.02 + wind.y * 0.02;
     if (energy > 0.05) {
@@ -188,12 +347,10 @@ function step(dt) {
       svy[i] += (Math.random() - 0.5) * energy * 0.6;
     }
 
-    // Drag — air resistance scales mildly with size (bigger flakes settle faster)
     const drag = 0.962 + sr[i] * 0.005;
     svx[i] *= drag;
     svy[i] *= drag;
 
-    // Cap velocity so a strong shake doesn't shoot a flake through the glass
     const vmax = 14;
     if (svx[i] > vmax) svx[i] = vmax;
     if (svx[i] < -vmax) svx[i] = -vmax;
@@ -203,7 +360,11 @@ function step(dt) {
     sx[i] += svx[i];
     sy[i] += svy[i];
 
-    // Confine inside globe — soft bounce off the sphere wall
+    // For petals, accumulate rotation from horizontal velocity
+    if (currentTheme.particle.type === 'petal') {
+      srot[i] += svx[i] * 0.012 + 0.004;
+    }
+
     const dx = sx[i] - g.cx;
     const dy = sy[i] - g.cy;
     const distSq = dx * dx + dy * dy;
@@ -214,7 +375,6 @@ function step(dt) {
       const ny = dy / dist;
       sx[i] = g.cx + nx * inner;
       sy[i] = g.cy + ny * inner;
-      // Reflect velocity, with damping so they don't pinball
       const vn = svx[i] * nx + svy[i] * ny;
       svx[i] -= (1 + 0.45) * vn * nx;
       svy[i] -= (1 + 0.45) * vn * ny;
@@ -224,13 +384,13 @@ function step(dt) {
   }
 }
 
-// ─── Render ───────────────────────────────────────────────────────────────
+// ─── Render ──────────────────────────────────────────────────────────────
 function render() {
   ctx.clearRect(0, 0, W, H);
   const g = globeGeom();
+  const t = currentTheme;
 
-  // Background stars (subtle, fixed positions per session)
-  drawStars();
+  if (!t.starsHidden) drawStars();
 
   // Globe shadow on pedestal
   ctx.beginPath();
@@ -238,56 +398,41 @@ function render() {
   ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
   ctx.fill();
 
-  // Pedestal — sits below the globe
-  drawPedestal(g);
+  drawPedestal(g, t);
 
-  // Glass interior background — softer night sky inside
+  // Glass interior
   const gradInner = ctx.createRadialGradient(g.cx, g.cy - g.r * 0.2, g.r * 0.1, g.cx, g.cy, g.r);
-  gradInner.addColorStop(0,    '#1f2438');
-  gradInner.addColorStop(0.55, '#161a2c');
-  gradInner.addColorStop(1,    '#0a0d1a');
+  gradInner.addColorStop(0,    t.skyInner[0]);
+  gradInner.addColorStop(0.55, t.skyInner[1]);
+  gradInner.addColorStop(1,    t.skyInner[2]);
   ctx.beginPath();
   ctx.arc(g.cx, g.cy, g.r, 0, Math.PI * 2);
   ctx.fillStyle = gradInner;
   ctx.fill();
 
-  // Clip everything from here to inside the sphere
   ctx.save();
   ctx.beginPath();
   ctx.arc(g.cx, g.cy, g.r - 2, 0, Math.PI * 2);
   ctx.clip();
 
-  // Moon — soft glow, biased upper-right
-  drawMoon(g);
-
-  // Distant mountain silhouette (back layer)
-  drawMountains(g, g.cy + g.r * 0.10, '#1c2235', 0.62);
-  // Closer mountain (mid layer)
-  drawMountains(g, g.cy + g.r * 0.30, '#11152a', 0.85);
-
-  // Hill + tree (foreground)
-  drawHill(g);
-
-  // Snow piled on the globe floor (subtle drift, not animated for v1)
-  drawFloorSnow(g);
-
-  // Snowflakes
-  drawFlakes();
+  if (t.id === 'cosmos') drawNebula(g, t);
+  drawMoon(g, t);
+  drawMountains(g, g.cy + g.r * 0.10, t.mountainsFar, 0.62);
+  drawMountains(g, g.cy + g.r * 0.30, t.mountainsNear, 0.85);
+  drawHill(g, t);
+  drawFloor(g, t);
+  drawFlakes(t);
 
   ctx.restore();
 
-  // Glass rim — drawn AFTER clip so it sits on top
-  drawGlass(g);
-
-  // Title + subtle engraving
-  drawBranding(g);
+  drawGlass(g, t);
 
   if (DEBUG) drawDebug();
 }
 
-// ─── Drawing helpers ──────────────────────────────────────────────────────
+// ─── Background stars (outside globe, fixed positions per session) ────────
 const STARS = Array.from({ length: 50 }, () => ({
-  x: Math.random(), y: Math.random() * 0.45,    // top half only
+  x: Math.random(), y: Math.random() * 0.45,
   r: 0.2 + Math.random() * 0.8,
   twinkle: Math.random() * Math.PI * 2,
 }));
@@ -303,31 +448,63 @@ function drawStars() {
   }
 }
 
-function drawMoon(g) {
-  const mx = g.cx + g.r * 0.42;
-  const my = g.cy - g.r * 0.55;
-  const mr = g.r * 0.13;
-  // Outer halo
+// ─── Cosmos: faint nebula gradient inside globe ───────────────────────────
+function drawNebula(g, t) {
+  const cx = g.cx + g.r * 0.2;
+  const cy = g.cy - g.r * 0.1;
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, g.r * 0.9);
+  grad.addColorStop(0,   'rgba(140, 80, 180, 0.25)');
+  grad.addColorStop(0.4, 'rgba(80, 50, 140, 0.12)');
+  grad.addColorStop(1,   'rgba(40, 20, 80, 0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(g.cx, g.cy, g.r, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawMoon(g, t) {
+  const m = t.moon;
+  const mx = g.cx + g.r * m.x;
+  const my = g.cy + g.r * m.y;
+  const mr = g.r * m.r;
+  // Halo
   const halo = ctx.createRadialGradient(mx, my, 0, mx, my, mr * 3.5);
-  halo.addColorStop(0,   'rgba(245, 232, 200, 0.42)');
-  halo.addColorStop(0.4, 'rgba(245, 232, 200, 0.12)');
-  halo.addColorStop(1,   'rgba(245, 232, 200, 0)');
+  halo.addColorStop(0,   m.halo);
+  halo.addColorStop(0.4, m.halo.replace(/,\s*[\d.]+\)$/, ', 0.12)'));
+  halo.addColorStop(1,   m.halo.replace(/,\s*[\d.]+\)$/, ', 0)'));
   ctx.fillStyle = halo;
   ctx.beginPath();
   ctx.arc(mx, my, mr * 3.5, 0, Math.PI * 2);
   ctx.fill();
-  // Moon disk
+  // Disk
   const disk = ctx.createRadialGradient(mx - mr * 0.3, my - mr * 0.3, 0, mx, my, mr);
-  disk.addColorStop(0, '#fff5e0');
-  disk.addColorStop(1, '#d8c39a');
+  disk.addColorStop(0, m.disk[0]);
+  disk.addColorStop(1, m.disk[1]);
   ctx.fillStyle = disk;
   ctx.beginPath();
   ctx.arc(mx, my, mr, 0, Math.PI * 2);
   ctx.fill();
+  // Cosmos: ring
+  if (m.ring) {
+    ctx.save();
+    ctx.translate(mx, my);
+    ctx.rotate(-0.36);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, mr * 1.85, mr * 0.42, 0, 0, Math.PI * 2);
+    ctx.lineWidth = 2.4;
+    ctx.strokeStyle = 'rgba(232, 210, 255, 0.55)';
+    ctx.stroke();
+    // Front half — slight darker so it feels like it wraps
+    ctx.beginPath();
+    ctx.ellipse(0, 0, mr * 1.85, mr * 0.42, 0, 0.05 * Math.PI, 0.95 * Math.PI);
+    ctx.lineWidth = 1.8;
+    ctx.strokeStyle = 'rgba(140, 100, 200, 0.85)';
+    ctx.stroke();
+    ctx.restore();
+  }
 }
 
 function drawMountains(g, baseY, color, height) {
-  // Two-stop sawtooth, semi-randomized by horizontal frequency derived from baseY
   ctx.beginPath();
   ctx.moveTo(g.cx - g.r, baseY);
   const steps = 12;
@@ -336,7 +513,6 @@ function drawMountains(g, baseY, color, height) {
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
     const px = g.cx - g.r + t * span;
-    // Use a deterministic "noise" — sin combos so it doesn't shimmer between frames
     const py = baseY - peak * (
       0.55 + 0.45 * Math.abs(Math.sin(t * 7.3 + baseY * 0.013) + 0.4 * Math.sin(t * 19 + baseY * 0.07))
     );
@@ -350,30 +526,29 @@ function drawMountains(g, baseY, color, height) {
   ctx.fill();
 }
 
-function drawHill(g) {
+function drawHill(g, t) {
   const baseY = g.cy + g.r * 0.50;
-  // Hill body — gentle parabola
   ctx.beginPath();
   ctx.moveTo(g.cx - g.r, baseY);
-  for (let t = 0; t <= 1; t += 0.04) {
-    const x = g.cx - g.r + t * g.r * 2;
-    const lift = g.r * 0.18 * (1 - Math.pow(2 * (t - 0.5), 2));
+  for (let s = 0; s <= 1; s += 0.04) {
+    const x = g.cx - g.r + s * g.r * 2;
+    const lift = g.r * 0.18 * (1 - Math.pow(2 * (s - 0.5), 2));
     ctx.lineTo(x, baseY - lift);
   }
   ctx.lineTo(g.cx + g.r, g.cy + g.r);
   ctx.lineTo(g.cx - g.r, g.cy + g.r);
   ctx.closePath();
-  ctx.fillStyle = '#080b18';
+  ctx.fillStyle = t.hill;
   ctx.fill();
 
-  // Tree atop hill — fir silhouette
   const tx = g.cx + g.r * 0.05;
   const ty = baseY - g.r * 0.15;
-  drawFir(tx, ty, g.r * 0.18, '#0a0c1c');
+  if (t.tree === 'cherry') drawCherry(tx, ty, g.r * 0.20, t);
+  else if (t.tree === 'spire') drawSpire(tx, ty, g.r * 0.20, t);
+  else drawFir(tx, ty, g.r * 0.18, t.tree, t.treeSnow);
 }
 
-function drawFir(x, y, h, color) {
-  // Three-tier fir made of triangles + slim trunk
+function drawFir(x, y, h, color, snow) {
   ctx.fillStyle = color;
   ctx.beginPath();
   ctx.moveTo(x, y - h);
@@ -389,34 +564,120 @@ function drawFir(x, y, h, color) {
   ctx.lineTo(x - h * 0.32, y - h * 0.55);
   ctx.closePath();
   ctx.fill();
-  // Snow caps on each tier
-  ctx.fillStyle = 'rgba(232, 226, 210, 0.55)';
-  ctx.beginPath();
-  ctx.moveTo(x, y - h);
-  ctx.lineTo(x + h * 0.07, y - h * 0.85);
-  ctx.lineTo(x - h * 0.07, y - h * 0.85);
-  ctx.closePath();
-  ctx.fill();
+  if (snow) {
+    ctx.fillStyle = snow;
+    ctx.beginPath();
+    ctx.moveTo(x, y - h);
+    ctx.lineTo(x + h * 0.07, y - h * 0.85);
+    ctx.lineTo(x - h * 0.07, y - h * 0.85);
+    ctx.closePath();
+    ctx.fill();
+  }
 }
 
-function drawFloorSnow(g) {
-  // Soft white crescent across the globe floor — settled snow
+// Cherry tree — slightly curved trunk with a cluster of soft blossom puffs
+function drawCherry(x, y, h, t) {
+  ctx.save();
+  // Trunk
+  ctx.strokeStyle = t.treeTrunk;
+  ctx.lineWidth = h * 0.08;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.bezierCurveTo(x - h * 0.05, y - h * 0.4, x + h * 0.08, y - h * 0.6, x, y - h * 0.85);
+  ctx.stroke();
+  // Branches
+  ctx.lineWidth = h * 0.04;
+  const branches = [
+    [-0.55, -0.55], [0.55, -0.45], [-0.4, -0.85], [0.45, -0.9], [0, -0.95],
+  ];
+  for (const [dx, dy] of branches) {
+    ctx.beginPath();
+    ctx.moveTo(x, y - h * 0.5);
+    ctx.lineTo(x + dx * h, y + dy * h);
+    ctx.stroke();
+  }
+  // Blossom puffs — soft pink clusters
+  const puffs = [
+    [-0.55, -0.55, 0.18], [0.55, -0.45, 0.18], [-0.4, -0.85, 0.20], [0.45, -0.9, 0.20],
+    [0, -0.95, 0.22], [-0.15, -0.7, 0.16], [0.2, -0.7, 0.16],
+  ];
+  for (const [dx, dy, rs] of puffs) {
+    const px = x + dx * h;
+    const py = y + dy * h;
+    const pr = h * rs;
+    const grad = ctx.createRadialGradient(px - pr * 0.3, py - pr * 0.3, 0, px, py, pr);
+    grad.addColorStop(0, 'rgba(255, 230, 240, 0.92)');
+    grad.addColorStop(0.7, t.treeBlossom);
+    grad.addColorStop(1, 'rgba(180, 80, 130, 0.4)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(px, py, pr, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+// Crystal spire — a slender prism for the cosmos scene
+function drawSpire(x, y, h, t) {
+  ctx.save();
+  // Body — diamond-stretched
+  ctx.beginPath();
+  ctx.moveTo(x, y - h * 1.05);
+  ctx.lineTo(x + h * 0.13, y - h * 0.25);
+  ctx.lineTo(x + h * 0.04, y);
+  ctx.lineTo(x - h * 0.04, y);
+  ctx.lineTo(x - h * 0.13, y - h * 0.25);
+  ctx.closePath();
+  const grad = ctx.createLinearGradient(x - h * 0.13, y, x + h * 0.13, y - h);
+  grad.addColorStop(0, 'rgba(60, 40, 100, 0.85)');
+  grad.addColorStop(0.5, t.treeBlossom);
+  grad.addColorStop(1, 'rgba(255, 230, 250, 0.9)');
+  ctx.fillStyle = grad;
+  ctx.fill();
+  // Inner facet line
+  ctx.strokeStyle = 'rgba(255, 240, 255, 0.55)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x, y - h * 1.05);
+  ctx.lineTo(x, y);
+  ctx.stroke();
+  // Glow halo at tip
+  const haloGrad = ctx.createRadialGradient(x, y - h * 1.0, 0, x, y - h * 1.0, h * 0.35);
+  haloGrad.addColorStop(0, 'rgba(216, 192, 255, 0.45)');
+  haloGrad.addColorStop(1, 'rgba(216, 192, 255, 0)');
+  ctx.fillStyle = haloGrad;
+  ctx.beginPath();
+  ctx.arc(x, y - h * 1.0, h * 0.35, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawFloor(g, t) {
   const baseY = g.cy + g.r * 0.62;
   ctx.beginPath();
   ctx.ellipse(g.cx, baseY + g.r * 0.05, g.r * 1.05, g.r * 0.22, 0, 0, Math.PI * 2);
   const grad = ctx.createLinearGradient(0, baseY - g.r * 0.05, 0, baseY + g.r * 0.18);
-  grad.addColorStop(0, 'rgba(232, 226, 210, 0.92)');
-  grad.addColorStop(1, 'rgba(232, 226, 210, 0.4)');
+  grad.addColorStop(0, t.floor[0]);
+  grad.addColorStop(1, t.floor[1]);
   ctx.fillStyle = grad;
   ctx.fill();
 }
 
-function drawFlakes() {
-  // Render in two passes for depth: small + dim first, big + bright on top.
-  // Cheap glow via a tiny outer shadow.
-  ctx.shadowColor = 'rgba(255, 250, 235, 0.45)';
+function drawFlakes(t) {
+  if (t.particle.type === 'petal') {
+    drawPetals(t);
+  } else if (t.particle.type === 'star') {
+    drawStardust(t);
+  } else {
+    drawSnow(t);
+  }
+}
+
+function drawSnow(t) {
+  ctx.shadowColor = t.particle.glow;
   ctx.shadowBlur = 4;
-  ctx.fillStyle = 'rgba(255, 252, 240, 0.95)';
+  ctx.fillStyle = t.particle.color;
   for (let i = 0; i < N; i++) {
     const r = sr[i];
     if (r > 1.3) continue;
@@ -437,22 +698,64 @@ function drawFlakes() {
   ctx.shadowBlur = 0;
 }
 
-function drawGlass(g) {
-  // Outer rim — thin metallic ring
+function drawPetals(t) {
+  ctx.fillStyle = t.particle.color;
+  for (let i = 0; i < N; i++) {
+    const r = sr[i] * 1.6;
+    ctx.save();
+    ctx.translate(sx[i], sy[i]);
+    ctx.rotate(srot[i]);
+    // Tilt the petal so it looks like it's falling face-up sometimes face-edge
+    const wobble = 0.55 + 0.45 * Math.sin(sphase[i] * 1.7);
+    ctx.globalAlpha = sa[i] * (0.75 + 0.25 * wobble);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, r, r * 0.55 * wobble + r * 0.15, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Tiny dark vein for shape definition
+    if (r > 1.6) {
+      ctx.strokeStyle = 'rgba(180, 80, 130, 0.35)';
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.7, 0);
+      ctx.lineTo(r * 0.7, 0);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawStardust(t) {
+  ctx.shadowColor = t.particle.glow;
+  ctx.shadowBlur = 6;
+  for (let i = 0; i < N; i++) {
+    const r = sr[i];
+    const tw = 0.6 + 0.4 * Math.sin(performance.now() * 0.003 + srot[i]);
+    ctx.globalAlpha = sa[i] * tw;
+    // Stars get a gentle hue tint
+    const hue = 220 + 30 * Math.sin(srot[i]);
+    ctx.fillStyle = `hsla(${hue}, 50%, 90%, 0.95)`;
+    ctx.beginPath();
+    ctx.arc(sx[i], sy[i], r * 1.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
+}
+
+function drawGlass(g, t) {
   ctx.beginPath();
   ctx.arc(g.cx, g.cy, g.r + 1, 0, Math.PI * 2);
   ctx.lineWidth = 2.2;
   ctx.strokeStyle = 'rgba(232, 218, 188, 0.75)';
   ctx.stroke();
 
-  // Inner dark rim — adds depth
   ctx.beginPath();
   ctx.arc(g.cx, g.cy, g.r - 1, 0, Math.PI * 2);
   ctx.lineWidth = 1;
   ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
   ctx.stroke();
 
-  // Top-left light highlight — long crescent
   ctx.save();
   ctx.beginPath();
   ctx.arc(g.cx, g.cy, g.r - 1, Math.PI * 1.05, Math.PI * 1.55);
@@ -461,7 +764,6 @@ function drawGlass(g) {
   ctx.stroke();
   ctx.restore();
 
-  // Lower-right reflection — soft arc
   ctx.save();
   ctx.beginPath();
   ctx.arc(g.cx, g.cy, g.r - 6, Math.PI * 0.05, Math.PI * 0.30);
@@ -470,20 +772,19 @@ function drawGlass(g) {
   ctx.stroke();
   ctx.restore();
 
-  // Specular dot near 11 o'clock
   ctx.beginPath();
   ctx.arc(g.cx - g.r * 0.55, g.cy - g.r * 0.55, 5, 0, Math.PI * 2);
   ctx.fillStyle = 'rgba(255, 250, 230, 0.55)';
   ctx.fill();
 }
 
-function drawPedestal(g) {
+function drawPedestal(g, t) {
   const top = g.cy + g.r * 0.92;
   const base = Math.min(top + g.r * 0.32, H - 24);
   const halfTop = g.r * 0.78;
   const halfBase = g.r * 0.92;
+  const p = t.pedestal;
 
-  // Body (warm dark wood)
   ctx.beginPath();
   ctx.moveTo(g.cx - halfTop, top);
   ctx.lineTo(g.cx + halfTop, top);
@@ -491,31 +792,29 @@ function drawPedestal(g) {
   ctx.lineTo(g.cx - halfBase, base);
   ctx.closePath();
   const woodGrad = ctx.createLinearGradient(0, top, 0, base);
-  woodGrad.addColorStop(0,    '#2a1d12');
-  woodGrad.addColorStop(0.45, '#3a281b');
-  woodGrad.addColorStop(1,    '#180f08');
+  woodGrad.addColorStop(0,    p.wood[0]);
+  woodGrad.addColorStop(0.45, p.wood[1]);
+  woodGrad.addColorStop(1,    p.wood[2]);
   ctx.fillStyle = woodGrad;
   ctx.fill();
 
-  // Top facet — small ring around the globe base
   ctx.beginPath();
   ctx.ellipse(g.cx, top, halfTop, halfTop * 0.16, 0, 0, Math.PI * 2);
-  ctx.fillStyle = '#1a1109';
+  ctx.fillStyle = p.topRing;
   ctx.fill();
   ctx.beginPath();
   ctx.ellipse(g.cx, top - 1, halfTop, halfTop * 0.13, 0, 0, Math.PI * 2);
-  ctx.strokeStyle = 'rgba(232, 218, 188, 0.42)';
+  ctx.strokeStyle = p.rim;
   ctx.lineWidth = 1;
   ctx.stroke();
 
-  // Brass plaque
   const plaqueW = halfTop * 1.15;
   const plaqueH = (base - top) * 0.5;
   const plaqueY = top + (base - top) * 0.28;
   const plaqueGrad = ctx.createLinearGradient(0, plaqueY, 0, plaqueY + plaqueH);
-  plaqueGrad.addColorStop(0,   '#7a5c2f');
-  plaqueGrad.addColorStop(0.5, '#a8854a');
-  plaqueGrad.addColorStop(1,   '#5a4220');
+  plaqueGrad.addColorStop(0,   p.plaque[0]);
+  plaqueGrad.addColorStop(0.5, p.plaque[1]);
+  plaqueGrad.addColorStop(1,   p.plaque[2]);
   ctx.fillStyle = plaqueGrad;
   ctx.beginPath();
   roundRect(ctx, g.cx - plaqueW / 2, plaqueY, plaqueW, plaqueH, 3);
@@ -524,21 +823,15 @@ function drawPedestal(g) {
   ctx.lineWidth = 0.6;
   ctx.stroke();
 
-  // Engraved title on plaque
   ctx.save();
   ctx.font = `${Math.max(11, plaqueH * 0.42)}px "Cormorant Garamond", "Times New Roman", serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  // Engraving — dark fill + faint highlight under
-  ctx.fillStyle = 'rgba(255, 240, 210, 0.18)';
-  ctx.fillText('SNOWGLOBE', g.cx, plaqueY + plaqueH * 0.5 + 0.6);
-  ctx.fillStyle = 'rgba(20, 12, 4, 0.92)';
-  ctx.fillText('SNOWGLOBE', g.cx, plaqueY + plaqueH * 0.5);
+  ctx.fillStyle = p.plaqueHi;
+  ctx.fillText(p.plaqueText, g.cx, plaqueY + plaqueH * 0.5 + 0.6);
+  ctx.fillStyle = p.plaqueInk;
+  ctx.fillText(p.plaqueText, g.cx, plaqueY + plaqueH * 0.5);
   ctx.restore();
-}
-
-function drawBranding(g) {
-  // No top title — the engraved plaque on the pedestal handles identity.
 }
 
 function roundRect(ctx, x, y, w, h, r) {
@@ -555,9 +848,10 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-// ─── Audio: ambient breathing wind + shake rustle + bell ──────────────────
+// ─── Audio ───────────────────────────────────────────────────────────────
 let audioCtx = null;
 let ambientGain = null;
+let ambientFilter = null;
 let ambientNode = null;
 function ensureAudio() {
   if (audioCtx) {
@@ -570,7 +864,6 @@ function ensureAudio() {
   startAmbient();
 }
 function startAmbient() {
-  // Brown-noise-ish source via biquad-filtered white noise buffer
   const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 4, audioCtx.sampleRate);
   const ch = buf.getChannelData(0);
   let last = 0;
@@ -582,27 +875,30 @@ function startAmbient() {
   ambientNode = audioCtx.createBufferSource();
   ambientNode.buffer = buf;
   ambientNode.loop = true;
-  const filter = audioCtx.createBiquadFilter();
-  filter.type = 'lowpass';
-  filter.frequency.value = 320;
-  filter.Q.value = 0.4;
+  ambientFilter = audioCtx.createBiquadFilter();
+  ambientFilter.type = 'lowpass';
+  ambientFilter.frequency.value = currentTheme.audio.ambientCutoff;
+  ambientFilter.Q.value = 0.4;
   ambientGain = audioCtx.createGain();
   ambientGain.gain.value = 0;
-  ambientNode.connect(filter).connect(ambientGain).connect(audioCtx.destination);
+  ambientNode.connect(ambientFilter).connect(ambientGain).connect(audioCtx.destination);
   ambientNode.start();
   scheduleAmbientBreathe();
 }
-// Breathing ambient: rise / hold / fall / silence — instant-play rule
-// (5-8 / 8-16 / 6-10 / 7-16 seconds, peak randomized).
 function scheduleAmbientBreathe() {
   if (!audioCtx) return;
+  // Retune the ambient filter to match the active theme each breath
+  if (ambientFilter) ambientFilter.frequency.linearRampToValueAtTime(
+    currentTheme.audio.ambientCutoff,
+    audioCtx.currentTime + 1.5
+  );
   const now = audioCtx.currentTime;
   const rand = (a, b) => a + Math.random() * (b - a);
   const rise   = rand(5, 8);
   const hold   = rand(8, 16);
   const fall   = rand(6, 10);
   const silent = rand(7, 16);
-  const peak   = 0.06 + Math.random() * 0.04;     // very low ambient
+  const peak   = 0.06 + Math.random() * 0.04;
   ambientGain.gain.cancelScheduledValues(now);
   ambientGain.gain.setValueAtTime(ambientGain.gain.value, now);
   ambientGain.gain.linearRampToValueAtTime(peak, now + rise);
@@ -613,20 +909,21 @@ function scheduleAmbientBreathe() {
 
 function pingShake() {
   if (!audioCtx) return;
+  const a = currentTheme.audio;
   const now = audioCtx.currentTime;
-  // Rustle: shaped white noise burst
+  // Rustle / wash
   const len = 0.5;
   const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * len, audioCtx.sampleRate);
   const ch = buf.getChannelData(0);
   for (let i = 0; i < ch.length; i++) {
-    const t = i / ch.length;
-    ch[i] = (Math.random() * 2 - 1) * Math.exp(-t * 4) * 0.6;
+    const tt = i / ch.length;
+    ch[i] = (Math.random() * 2 - 1) * Math.exp(-tt * 4) * 0.6;
   }
   const src = audioCtx.createBufferSource();
   src.buffer = buf;
   const flt = audioCtx.createBiquadFilter();
   flt.type = 'bandpass';
-  flt.frequency.value = 1200;
+  flt.frequency.value = 800 + a.ambientCutoff * 1.5;
   flt.Q.value = 1.2;
   const gain = audioCtx.createGain();
   gain.gain.setValueAtTime(0, now);
@@ -636,35 +933,42 @@ function pingShake() {
   src.start(now);
   src.stop(now + len + 0.1);
 
-  // Bell shimmer — single high sine struck on each shake (random pentatonic note)
-  const PENT = [880, 988, 1175, 1319, 1480];
-  const f = PENT[Math.floor(Math.random() * PENT.length)];
+  // Bell
+  const f = a.bellTones[Math.floor(Math.random() * a.bellTones.length)];
   const osc = audioCtx.createOscillator();
   const og = audioCtx.createGain();
-  osc.type = 'sine';
+  osc.type = a.bellType;
   osc.frequency.value = f;
   og.gain.setValueAtTime(0, now);
-  og.gain.linearRampToValueAtTime(0.07, now + 0.01);
-  og.gain.exponentialRampToValueAtTime(0.0001, now + 1.4);
+  og.gain.linearRampToValueAtTime(a.bellPeak, now + a.bellAttack);
+  og.gain.exponentialRampToValueAtTime(0.0001, now + a.bellDecay);
   osc.connect(og).connect(audioCtx.destination);
   osc.start(now);
-  osc.stop(now + 1.5);
+  osc.stop(now + a.bellDecay + 0.1);
 }
 
-// ─── Sensor: Aigram System API postMessage bridge ─────────────────────────
-// iframe → host: "TG.ACCELEROMETER-<base64({refresh_rate})>"
-// host → iframe: "TG.ACCELEROMETER.CHANGED-<base64({x,y,z})>"
-// Matches reference_aigram_system_api.md / Marbles. Tilt → wTarget; shake
-// jolt > threshold → shake().
+// ─── Sensor: Aigram bridge (preferred) + DOM fallback (Safari standalone) ──
 const sensor = {
   active: false, state: '—',
   smooth: { x: 0, y: 0, z: 0 }, primed: false,
   lastJolt: 0, lastShakeFire: 0,
+  domOrient: false, domMotion: false,
+  domStatus: 'idle', // 'idle' | 'pending' | 'on' | 'off'
+  permState: '—',
 };
 const SENSOR_SMOOTH = 0.35;
 const G_NOM = 9.8;
 const TILT_GAIN = G_NOM * Math.SQRT1_2;
 const SHAKE_THRESHOLD = 13;
+
+function isEmbedded() {
+  const tg = window.Telegram && window.Telegram.WebApp;
+  return !!(tg && tg.initData) ||
+    new URLSearchParams(location.search).has('api_origin') ||
+    (window.parent && window.parent !== window);
+}
+
+// Aigram postMessage relay (subscribed even in standalone — harmless when no host)
 function setupAigramBridge() {
   if (!window.parent || window.parent === window) return;
   window.addEventListener('message', (ev) => {
@@ -684,13 +988,10 @@ function setupAigramBridge() {
       sensor.smooth.y += (data.y - sensor.smooth.y) * SENSOR_SMOOTH;
       sensor.smooth.z += (data.z - sensor.smooth.z) * SENSOR_SMOOTH;
     }
-    // Tilt → wind. Sign convention: tilt phone right → wind blows snow right.
-    // Canvas y is down, so flip sign so tilting top-of-phone-away pushes snow up.
     const gxNorm = Math.max(-1, Math.min(1, sensor.smooth.x / TILT_GAIN));
     const gyNorm = Math.max(-1, Math.min(1, sensor.smooth.y / TILT_GAIN));
     wTarget.x = gxNorm * 1.2;
     wTarget.y = -gyNorm * 1.2;
-    // Shake = magnitude minus gravity baseline
     const mag = Math.sqrt(data.x * data.x + data.y * data.y + data.z * data.z);
     const jolt = Math.abs(mag - G_NOM);
     sensor.lastJolt = jolt;
@@ -706,16 +1007,86 @@ function setupAigramBridge() {
 }
 setupAigramBridge();
 
+// DOM DeviceOrientation — driven by gamma/beta, in degrees
+window.addEventListener('deviceorientation', (e) => {
+  if (sensor.active) return;            // Aigram bridge has authority
+  if (e.beta == null && e.gamma == null) return;
+  sensor.domOrient = true;
+  sensor.domStatus = 'on';
+  const gx = Math.max(-1, Math.min(1, (e.gamma || 0) / 45));
+  const gy = Math.max(-1, Math.min(1, (e.beta || 0) / 45));
+  wTarget.x = gx * 1.2;
+  wTarget.y = gy * 1.2;
+});
+// DOM DeviceMotion — for shake detection
+window.addEventListener('devicemotion', (e) => {
+  if (sensor.active) return;
+  sensor.domMotion = true;
+  const accel = e.acceleration && e.acceleration.x !== null ? e.acceleration : null;
+  const a = accel || e.accelerationIncludingGravity;
+  if (!a) return;
+  const ax = a.x || 0, ay = a.y || 0, az = a.z || 0;
+  const mag = Math.sqrt(ax * ax + ay * ay + az * az);
+  const baseline = accel ? 0 : G_NOM;
+  const jolt = Math.abs(mag - baseline);
+  sensor.lastJolt = jolt;
+  const now = performance.now();
+  if (jolt > SHAKE_THRESHOLD && now - sensor.lastShakeFire > 600) {
+    sensor.lastShakeFire = now;
+    shake(Math.min(1.2, jolt / 14));
+  }
+});
+
+// iOS 13+ permission prompt — must be triggered in a user gesture, both
+// requestPermission() calls fire synchronously (no await between them).
+let motionPerms = 'idle';   // 'idle' | 'pending' | 'done'
+function requestMotionPerms() {
+  if (motionPerms !== 'idle') return;
+  const O = window.DeviceOrientationEvent;
+  const M = window.DeviceMotionEvent;
+  const hasReq = (O && typeof O.requestPermission === 'function') ||
+                 (M && typeof M.requestPermission === 'function');
+  const toErr = (e) => 'error: ' + (e && e.message ? e.message : e);
+  const oP = (O && typeof O.requestPermission === 'function')
+    ? O.requestPermission().catch(toErr) : Promise.resolve('n/a');
+  const mP = (M && typeof M.requestPermission === 'function')
+    ? M.requestPermission().catch(toErr) : Promise.resolve('n/a');
+  motionPerms = 'pending';
+  sensor.domStatus = 'pending';
+  Promise.all([oP, mP]).then(([oS, mS]) => {
+    sensor.permState = `o=${oS} m=${mS} req=${hasReq}`;
+    motionPerms = 'done';
+    setTimeout(() => {
+      if (sensor.domOrient || sensor.domMotion) {
+        sensor.domStatus = 'on';
+      } else {
+        sensor.domStatus = 'off';
+        motionPerms = 'idle';            // allow retry via the pill
+      }
+      updatePermPill();
+    }, 1500);
+  });
+}
+function updatePermPill() {
+  const show = sensor.domStatus === 'off' && !isEmbedded() && !sensor.active;
+  permBtn.classList.toggle('is-show', show);
+}
+// `onclick` (not pointerdown) is the only reliable iOS-Safari gesture for
+// requestPermission(). Reasoning in feedback_ios_motion_perms.md.
+permBtn.addEventListener('click', () => {
+  ensureAudio();
+  requestMotionPerms();
+});
+
 // ─── Touch fallback: drag-to-shake + tap-sparkle ──────────────────────────
-// In Safari standalone (no Aigram bridge), we still want a way to shake.
-// A fast pointer movement (high pixel velocity over a short window) =
-// shake. A simple tap = small sparkle / tiny shake.
 let pointerActive = false;
 let pdown = { x: 0, y: 0, t: 0 };
 let plast = { x: 0, y: 0, t: 0 };
 let dragVel = 0;
 function pointerStart(e) {
   ensureAudio();
+  // Try perm request opportunistically — works on Android, no-op iOS until pill click
+  requestMotionPerms();
   pointerActive = true;
   pdown.x = plast.x = e.clientX;
   pdown.y = plast.y = e.clientY;
@@ -728,7 +1099,7 @@ function pointerMove(e) {
   const dt = Math.max(1, now - plast.t);
   const dx = e.clientX - plast.x;
   const dy = e.clientY - plast.y;
-  const v = Math.sqrt(dx * dx + dy * dy) / dt;     // px / ms
+  const v = Math.sqrt(dx * dx + dy * dy) / dt;
   dragVel = dragVel * 0.65 + v * 0.35;
   plast.x = e.clientX; plast.y = e.clientY; plast.t = now;
   if (dragVel > 1.4 && now - sensor.lastShakeFire > 500) {
@@ -743,7 +1114,6 @@ function pointerEnd(e) {
   const now = performance.now();
   const moved = Math.hypot(e.clientX - pdown.x, e.clientY - pdown.y);
   const dur = now - pdown.t;
-  // Quick tap with little movement = sparkle (small puff of snowflakes)
   if (moved < 12 && dur < 280) {
     sparkleAt(e.clientX, e.clientY);
   }
@@ -754,12 +1124,10 @@ canvas.addEventListener('pointerup',   pointerEnd);
 canvas.addEventListener('pointercancel', pointerEnd);
 
 function sparkleAt(x, y) {
-  // Gently push the nearest 30 flakes outward from the touch point.
   const g = globeGeom();
   const dx0 = x - g.cx, dy0 = y - g.cy;
-  if (dx0 * dx0 + dy0 * dy0 > g.r * g.r) return;   // tap outside dome → ignore
+  if (dx0 * dx0 + dy0 * dy0 > g.r * g.r) return;
   hintEl.classList.add('is-gone');
-  // Find K nearest flakes, kick them outward
   const K = 28;
   const idx = [];
   for (let i = 0; i < N; i++) {
@@ -783,11 +1151,11 @@ function sparkleAt(x, y) {
 // ─── Debug overlay ────────────────────────────────────────────────────────
 function drawDebug() {
   const lines = [
-    'SNOWGLOBE',
+    `SNOWGLOBE · ${currentTheme.id}`,
     `dpr: ${DPR.toFixed(2)}  ${W}×${H}`,
-    `aigram: ${sensor.state}`,
-    `active: ${sensor.active ? 'yes' : 'no'}`,
-    `smooth: ${sensor.smooth.x.toFixed(1)}/${sensor.smooth.y.toFixed(1)}/${sensor.smooth.z.toFixed(1)}`,
+    `aigram: ${sensor.state}  active: ${sensor.active ? 'yes' : 'no'}`,
+    `dom: status=${sensor.domStatus} orient=${sensor.domOrient ? 'y' : 'n'} motion=${sensor.domMotion ? 'y' : 'n'}`,
+    `perm: ${sensor.permState}`,
     `wind: ${wind.x.toFixed(2)} / ${wind.y.toFixed(2)}`,
     `jolt: ${sensor.lastJolt.toFixed(1)}  energy: ${energy.toFixed(2)}`,
   ];
@@ -797,22 +1165,17 @@ function drawDebug() {
 // ─── Main loop ────────────────────────────────────────────────────────────
 let last = performance.now();
 function frame(now) {
-  const dt = Math.min(33, now - last);
   last = now;
-  step(dt);
+  step();
   render();
+  // Refresh perm pill visibility — domStatus can flip after the 1.5s probe
+  if (Math.floor(now / 250) % 2 === 0) updatePermPill();
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 
-// ─── Attract mode ─────────────────────────────────────────────────────────
-// Bounded — single welcome shake at mount, then idle. Don't run setInterval
-// forever waiting for first touch (the games-list preloads us in the
-// background and would fill the dome over time). See feedback_game_preload_idle.md.
-setTimeout(() => {
-  // Soft initial swirl so the user sees motion immediately
-  shake(0.6);
-}, 380);
+// ─── Attract mode: bounded — single welcome shake then idle ───────────────
+setTimeout(() => { shake(0.6); }, 380);
 </script>
 </body>
 </html>

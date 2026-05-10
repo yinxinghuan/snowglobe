@@ -73,26 +73,47 @@
   .switcher-btn.is-active[data-theme="cosmos"] { color: #d8c0ff; }
   .switcher-btn svg { display: block; width: 20px; height: 20px; stroke-width: 1.6; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; }
 
-  .hint {
+  /* Status row at bottom: time · moon · temperature */
+  .status {
     position: absolute;
-    bottom: calc(max(20px, env(safe-area-inset-bottom)) + 18px);
+    bottom: calc(max(20px, env(safe-area-inset-bottom)) + 12px);
     left: 50%;
     transform: translateX(-50%);
-    font-size: 10px;
-    letter-spacing: 0.42em;
-    text-transform: uppercase;
-    color: rgba(232, 212, 181, 0.42);
+    display: flex;
+    gap: 11px;
+    align-items: center;
+    font-family: ui-monospace, "JetBrains Mono", monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.22em;
+    color: rgba(232, 220, 200, 0.45);
     pointer-events: none;
     z-index: 5;
-    animation: hintBreathe 4s ease-in-out 1.2s infinite;
-    text-align: center;
     white-space: nowrap;
   }
-  @keyframes hintBreathe {
-    0%, 100% { opacity: 0.3; }
-    50% { opacity: 0.7; }
+  .status-sep { opacity: 0.5; }
+  .status-moon { display: inline-flex; align-items: center; gap: 5px; }
+  .status-moon-glyph { font-size: 13px; line-height: 1; opacity: 0.85; }
+
+  /* Cycling poetic fragment, just above the status row */
+  .poem {
+    position: absolute;
+    bottom: calc(max(20px, env(safe-area-inset-bottom)) + 38px);
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: "Cormorant Garamond", "Times New Roman", serif;
+    font-style: italic;
+    font-size: 15px;
+    letter-spacing: 0.02em;
+    color: rgba(232, 218, 188, 0.66);
+    text-align: center;
+    max-width: 86vw;
+    pointer-events: none;
+    z-index: 5;
+    opacity: 0;
+    transition: opacity 1.6s ease;
+    line-height: 1.2;
   }
-  .hint.is-gone { animation: none; opacity: 0; transition: opacity 1.6s ease; }
+  .poem.is-visible { opacity: 1; }
 
   .perm {
     position: absolute;
@@ -153,7 +174,14 @@
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><ellipse cx="12" cy="12" rx="9.5" ry="3" transform="rotate(-22 12 12)"/></svg>
   </button>
 </div>
-<div class="hint" id="hint">Shake · Tilt</div>
+<div class="poem" id="poem"></div>
+<div class="status" id="status">
+  <span id="statusTime">--:--</span>
+  <span class="status-sep">·</span>
+  <span class="status-moon"><span class="status-moon-glyph" id="moonGlyph">🌒</span><span id="moonName">CRESCENT</span></span>
+  <span class="status-sep">·</span>
+  <span id="statusTemp">—</span>
+</div>
 <button class="perm" id="permBtn">⤲ enable tilt &amp; shake</button>
 <div class="debug" id="debug"></div>
 <script>
@@ -162,10 +190,14 @@
 // ─── Setup ────────────────────────────────────────────────────────────────
 const canvas = document.getElementById('stage');
 const ctx = canvas.getContext('2d');
-const hintEl = document.getElementById('hint');
 const debugEl = document.getElementById('debug');
 const permBtn = document.getElementById('permBtn');
 const switcherEl = document.getElementById('switcher');
+const poemEl = document.getElementById('poem');
+const statusTimeEl = document.getElementById('statusTime');
+const statusTempEl = document.getElementById('statusTemp');
+const moonGlyphEl = document.getElementById('moonGlyph');
+const moonNameEl = document.getElementById('moonName');
 const params = new URLSearchParams(location.search);
 const DEBUG = params.get('debug') === '1';
 if (DEBUG) debugEl.classList.add('is-on');
@@ -257,7 +289,6 @@ function setTheme(id) {
     btn.classList.toggle('is-active', btn.dataset.theme === id);
   }
   // Audio retunes on next bell
-  hintEl.classList.add('is-gone');
 }
 for (const btn of switcherEl.querySelectorAll('.switcher-btn')) {
   btn.addEventListener('pointerdown', (e) => {
@@ -325,7 +356,6 @@ function shake(strength = 1) {
     svy[i] += Math.sin(a) * v - (3 + Math.random() * 3) * strength;
   }
   lastShakeT = performance.now();
-  hintEl.classList.add('is-gone');
   pingShake();
 }
 
@@ -423,9 +453,15 @@ function render() {
   drawFloor(g, t);
   drawFlakes(t);
 
+  // Sphere shading INSIDE the clip — sells volume by darkening the lower-right
+  // (the side away from the implied upper-left light source) and washing a
+  // soft warm light through the glass on the upper-left.
+  drawSphereShading(g);
+
   ctx.restore();
 
   drawGlass(g, t);
+  drawGlassSpec(g);
 
   if (DEBUG) drawDebug();
 }
@@ -758,9 +794,9 @@ function drawGlass(g, t) {
 
   ctx.save();
   ctx.beginPath();
-  ctx.arc(g.cx, g.cy, g.r - 1, Math.PI * 1.05, Math.PI * 1.55);
-  ctx.lineWidth = 3.5;
-  ctx.strokeStyle = 'rgba(255, 250, 230, 0.32)';
+  ctx.arc(g.cx, g.cy, g.r - 1, Math.PI * 1.02, Math.PI * 1.62);
+  ctx.lineWidth = 3.8;
+  ctx.strokeStyle = 'rgba(255, 250, 230, 0.48)';
   ctx.stroke();
   ctx.restore();
 
@@ -772,10 +808,72 @@ function drawGlass(g, t) {
   ctx.stroke();
   ctx.restore();
 
+  // (Specular spots are now drawn separately in drawGlassSpec, after rims)
+}
+
+// Sphere depth shading — pulled inside the clip so it darkens the scene
+// itself, not just the glass surface. Selling the dome's curvature: the
+// implied light is upper-left, so the lower-right gets a soft fall-off.
+function drawSphereShading(g) {
+  // Subtle outer dark vignette anchored at lower-right
+  const sg = ctx.createRadialGradient(
+    g.cx + g.r * 0.35, g.cy + g.r * 0.35, g.r * 0.45,
+    g.cx + g.r * 0.35, g.cy + g.r * 0.35, g.r * 1.45
+  );
+  sg.addColorStop(0,   'rgba(0, 0, 0, 0)');
+  sg.addColorStop(0.65, 'rgba(0, 0, 0, 0.18)');
+  sg.addColorStop(1,    'rgba(0, 0, 0, 0.42)');
+  ctx.fillStyle = sg;
+  ctx.fillRect(g.cx - g.r, g.cy - g.r, g.r * 2, g.r * 2);
+
+  // Soft warm wash from the upper-left — like ambient room light through glass
+  const lw = ctx.createRadialGradient(
+    g.cx - g.r * 0.40, g.cy - g.r * 0.45, 0,
+    g.cx - g.r * 0.40, g.cy - g.r * 0.45, g.r * 0.95
+  );
+  lw.addColorStop(0,   'rgba(255, 248, 230, 0.20)');
+  lw.addColorStop(0.45, 'rgba(255, 248, 230, 0.08)');
+  lw.addColorStop(1,    'rgba(255, 248, 230, 0)');
+  ctx.fillStyle = lw;
+  ctx.fillRect(g.cx - g.r, g.cy - g.r, g.r * 2, g.r * 2);
+}
+
+// Sharp specular reflections — drawn AFTER the rims so they sit on the very
+// top. A real glass orb under directional light has one tight bright kernel
+// plus one or two smaller reflected sparkles.
+function drawGlassSpec(g) {
+  // Primary streak ~ 10 o'clock — elongated highlight
+  const sx1 = g.cx - g.r * 0.50;
+  const sy1 = g.cy - g.r * 0.55;
+  ctx.save();
+  ctx.translate(sx1, sy1);
+  ctx.rotate(-0.55);
+  const spec = ctx.createRadialGradient(0, 0, 0, 0, 0, g.r * 0.20);
+  spec.addColorStop(0,    'rgba(255, 255, 255, 0.96)');
+  spec.addColorStop(0.35, 'rgba(255, 255, 255, 0.55)');
+  spec.addColorStop(0.75, 'rgba(255, 255, 255, 0.12)');
+  spec.addColorStop(1,    'rgba(255, 255, 255, 0)');
+  ctx.fillStyle = spec;
   ctx.beginPath();
-  ctx.arc(g.cx - g.r * 0.55, g.cy - g.r * 0.55, 5, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(255, 250, 230, 0.55)';
+  ctx.ellipse(0, 0, g.r * 0.07, g.r * 0.20, 0, 0, Math.PI * 2);
   ctx.fill();
+  ctx.restore();
+
+  // Secondary sparkle near 1 o'clock — smaller, dimmer
+  const sx2 = g.cx + g.r * 0.50;
+  const sy2 = g.cy - g.r * 0.42;
+  ctx.save();
+  ctx.translate(sx2, sy2);
+  ctx.rotate(0.4);
+  const sp2 = ctx.createRadialGradient(0, 0, 0, 0, 0, g.r * 0.10);
+  sp2.addColorStop(0,   'rgba(255, 255, 255, 0.55)');
+  sp2.addColorStop(0.6, 'rgba(255, 255, 255, 0.15)');
+  sp2.addColorStop(1,   'rgba(255, 255, 255, 0)');
+  ctx.fillStyle = sp2;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, g.r * 0.035, g.r * 0.10, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
 function drawPedestal(g, t) {
@@ -1127,7 +1225,6 @@ function sparkleAt(x, y) {
   const g = globeGeom();
   const dx0 = x - g.cx, dy0 = y - g.cy;
   if (dx0 * dx0 + dy0 * dy0 > g.r * g.r) return;
-  hintEl.classList.add('is-gone');
   const K = 28;
   const idx = [];
   for (let i = 0; i < N; i++) {
@@ -1173,6 +1270,169 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
+// ─── Time / moon / temperature / poetry ───────────────────────────────────
+// Poetic fragments — per-theme pools that cycle every ~22 seconds with a
+// fade. Kept short (under ~36 chars) so they fit a single line on phone.
+const POEMS = {
+  winter: [
+    'the night begins to taste of snow',
+    'all the small lights of memory',
+    'moonlight on a black lake',
+    'stars sharp enough to cut',
+    'every silence is a small church',
+    'snow falls on snow',
+    'the road home dissolves in breath',
+    'winter is the air remembering',
+    'a fox crosses the river of frost',
+    'stillness, measured by porch lamps',
+    'the hour the wolves keep',
+    'owls keeping the night legible',
+  ],
+  sakura: [
+    'petals fall like soft applause',
+    'even the moon leans in',
+    'a paper lantern made of breath',
+    'spring is loud only when you stop',
+    'we are all temporary',
+    'scattered — therefore beautiful',
+    'evening, and the river takes its color back',
+    'the temple bell does not say goodbye',
+    'drifting, an old word for loving',
+    'between two pink hours',
+    'the dusk wears a kimono',
+    'the wind learns the shape of a blossom',
+  ],
+  cosmos: [
+    'all this light arrived very late',
+    'we are made of waiting',
+    'every star is a verb',
+    'gravity is the longest sentence',
+    'the dark hums when no one looks',
+    'the universe has only one tense',
+    'drift is a kind of arrival',
+    'the silence between stars',
+    'old light, new eyes',
+    'we orbit ourselves',
+    'even the void has a heartbeat',
+    'dust that remembered itself',
+  ],
+};
+
+// Per-theme temperature pool — picked once per session per theme so the
+// reading feels stable while you're inside one mood, but jumps when you
+// switch globes. Mix °C / °F so the scale doesn't read as "real weather".
+const TEMPS = {
+  winter: ['−4°C', '−7°C', '−2°C', '−12°C', '0°C'],
+  sakura: ['12°C', '15°C', '11°C', '17°C', '13°C'],
+  cosmos: ['−270.4°C', '2.7 K', '−454°F', '−270°C', '3 K'],
+};
+const themeTempCache = {};
+function tempFor(themeId) {
+  if (!themeTempCache[themeId]) {
+    const pool = TEMPS[themeId];
+    themeTempCache[themeId] = pool[Math.floor(Math.random() * pool.length)];
+  }
+  return themeTempCache[themeId];
+}
+
+// Compute moon phase 0..1 (0 = new, 0.5 = full) from a known new moon.
+// Reference: 2000-01-06 18:14 UTC. Synodic month ≈ 29.530588853 days.
+function moonPhase(date) {
+  const ref = Date.UTC(2000, 0, 6, 18, 14);
+  const cycle = 29.530588853 * 86400000;
+  return ((date.getTime() - ref) % cycle + cycle) % cycle / cycle;
+}
+function moonGlyph(p) {
+  if (p < 0.03 || p > 0.97) return '🌑';
+  if (p < 0.22) return '🌒';
+  if (p < 0.28) return '🌓';
+  if (p < 0.47) return '🌔';
+  if (p < 0.53) return '🌕';
+  if (p < 0.72) return '🌖';
+  if (p < 0.78) return '🌗';
+  return '🌘';
+}
+function moonName(p) {
+  if (p < 0.03 || p > 0.97) return 'NEW';
+  if (p < 0.22) return 'WAXING';
+  if (p < 0.28) return 'FIRST QTR';
+  if (p < 0.47) return 'GIBBOUS';
+  if (p < 0.53) return 'FULL';
+  if (p < 0.72) return 'GIBBOUS';
+  if (p < 0.78) return 'LAST QTR';
+  return 'WANING';
+}
+function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+function updateStatus() {
+  const now = new Date();
+  statusTimeEl.textContent = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+  const ph = moonPhase(now);
+  moonGlyphEl.textContent = moonGlyph(ph);
+  moonNameEl.textContent = moonName(ph);
+  statusTempEl.textContent = tempFor(currentTheme.id);
+}
+updateStatus();
+// Refresh time every 30 seconds so the clock keeps pace without thrashing
+setInterval(updateStatus, 30000);
+
+// Poem rotator — fades the current line out, swaps text, fades in.
+let poemIdx = -1;
+let poemTimer = null;
+const POEM_INTERVAL = 22000;
+const POEM_FADE = 1500;
+function showPoemLine(text) {
+  poemEl.classList.remove('is-visible');
+  setTimeout(() => {
+    poemEl.textContent = text;
+    poemEl.classList.add('is-visible');
+  }, POEM_FADE);
+}
+function nextPoem() {
+  const list = POEMS[currentTheme.id];
+  let next = Math.floor(Math.random() * list.length);
+  if (next === poemIdx) next = (next + 1) % list.length;
+  poemIdx = next;
+  showPoemLine(list[poemIdx]);
+}
+function startPoems() {
+  if (poemTimer) clearInterval(poemTimer);
+  poemIdx = -1;
+  // First poem after a beat so the dome reads first
+  setTimeout(nextPoem, 1100);
+  poemTimer = setInterval(nextPoem, POEM_INTERVAL);
+}
+function refreshPoemForTheme() {
+  if (poemTimer) clearInterval(poemTimer);
+  poemIdx = -1;
+  // Quick swap (don't wait the full 1.1s) so theme change feels responsive
+  showPoemLine('');
+  setTimeout(nextPoem, POEM_FADE + 100);
+  poemTimer = setInterval(nextPoem, POEM_INTERVAL);
+}
+startPoems();
+
+// Hook into theme change: refresh status temperature + restart poem cycle
+const _origSetTheme = setTheme;
+setTheme = function(id) {
+  _origSetTheme(id);
+  updateStatus();
+  refreshPoemForTheme();
+};
+// Re-bind switcher buttons since they captured the original setTheme
+for (const btn of switcherEl.querySelectorAll('.switcher-btn')) {
+  // Replace any prior handler — listeners stack in JS, so we'd otherwise
+  // call setTheme twice on click after this script section runs.
+  const newBtn = btn.cloneNode(true);
+  btn.parentNode.replaceChild(newBtn, btn);
+  newBtn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    ensureAudio();
+    setTheme(newBtn.dataset.theme);
+    shake(0.4);
+  });
+}
 
 // ─── Attract mode: bounded — single welcome shake then idle ───────────────
 setTimeout(() => { shake(0.6); }, 380);

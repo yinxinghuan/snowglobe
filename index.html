@@ -130,12 +130,18 @@
     transform-origin: 50% 70%;
     animation: hintShake 1.4s ease-in-out infinite;
     color: currentColor;
+    /* Doubles as the iOS sensor-permission button — pointer-events: auto
+       on just the icon so the rest of the hint area still passes taps. */
+    pointer-events: auto;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
   }
   @keyframes hintShake {
-    0%, 100% { transform: rotate(-14deg); }
-    25% { transform: rotate(0deg); }
-    50% { transform: rotate(14deg); }
-    75% { transform: rotate(0deg); }
+    0%   { transform: rotate(-14deg) translateX(-2px); }
+    25%  { transform: rotate(-3deg)  translateX(1px);  }
+    50%  { transform: rotate(14deg)  translateX(2px);  }
+    75%  { transform: rotate(3deg)   translateX(-1px); }
+    100% { transform: rotate(-14deg) translateX(-2px); }
   }
 
   /* Cycling poetic fragment, just above the status row */
@@ -233,7 +239,6 @@
   <span class="status-sep">·</span>
   <span id="statusTemp">—</span>
 </div>
-<button class="perm" id="permBtn">⤲ enable tilt &amp; shake</button>
 <div class="debug" id="debug"></div>
 <script>
 'use strict';
@@ -242,7 +247,7 @@
 const canvas = document.getElementById('stage');
 const ctx = canvas.getContext('2d');
 const debugEl = document.getElementById('debug');
-const permBtn = document.getElementById('permBtn');
+const permBtn = document.querySelector('.hint-icon');
 const switcherEl = document.getElementById('switcher');
 const poemEl = document.getElementById('poem');
 const hintEl = document.getElementById('hint');
@@ -1255,8 +1260,9 @@ function requestMotionPerms() {
   });
 }
 function updatePermPill() {
-  const show = sensor.domStatus === 'off' && !isEmbedded() && !sensor.active;
-  permBtn.classList.toggle('is-show', show);
+  /* No-op: the perms button used to be a separate pill, now it's the
+     .hint-icon inside the main hint which is already shown/hidden by
+     the hint's `.is-visible` class. */
 }
 // `onclick` (not pointerdown) is the only reliable iOS-Safari gesture for
 // requestPermission(). Reasoning in feedback_ios_motion_perms.md.
